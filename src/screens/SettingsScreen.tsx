@@ -14,17 +14,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { TimePickerModal } from '../components/TimePickerModal';
 import { UpgradeModal } from '../premium/UpgradeModal';
-import { loadSettings, saveSettings, AppSettings } from '../storage/storageService';
+import {
+  loadSettings,
+  saveSettings,
+  addLocation,
+  removeLocation,
+  clearWeatherCache,
+  AppSettings,
+  Location,
+  MAX_LOCATIONS_FREE,
+  MAX_LOCATIONS_PREMIUM,
+} from '../storage/storageService';
 import { getPremiumStatus, setMockPremium } from '../premium/premiumService';
 import { geocodeCity } from '../weather/weatherService';
 import { requestDeviceLocation, reverseGeocode } from '../services/locationService';
-import { clearWeatherCache } from '../storage/storageService';
 import {
   requestNotificationPermission,
   scheduleDailyReminder,
   cancelDailyReminder,
 } from '../notifications/notificationService';
-import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS, BORDER_RADIUS as BR } from '../constants/theme';
+import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -50,64 +59,64 @@ function Row({ children, last }: { children: React.ReactNode; last?: boolean }) 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
-  const [locationDraft, setLocationDraft] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [settings, setSettings]       = useState<AppSettings | null>(null);
+  const [isPremium, setIsPremium]     = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [cityDraft, setCityDraft]     = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
-  // Reload every time this tab is focused
+  // Reload on focus
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
-        const [s, p] = await Promise.all([loadSettings(), getPremiumStatus()]);
+        const [s, { isPremium: p }] = await Promise.all([loadSettings(), getPremiumStatus()]);
         if (!active) return;
         setSettings(s);
-        setLocationDraft(s.locationName);
-        setIsPremium(p.isPremium);
+        setIsPremium(p);
       })();
       return () => { active = false; };
-    }, [])
+    }, []),
   );
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Location handlers ────────────────────────────────────────────────────────
 
-  async function handleSaveLocation() {
-    const name = locationDraft.trim();
+  const maxLocations = isPremium ? MAX_LOCATIONS_PREMIUM : MAX_LOCATIONS_FREE;
+  const locations    = settings?.locations ?? [];
+  const canAdd       = locations.length < maxLocations;
+
+  async function handleAddCity() {
+    const name = cityDraft.trim();
     if (!name) { Alert.alert('Enter a city name first.'); return; }
     setSaving(true);
     try {
       const results = await geocodeCity(name);
       if (!results.length) {
-        Alert.alert('City not found', `"${name}" did not return any results. Try a different spelling.`);
+        Alert.alert('City not found', `"${name}" returned no results. Try a different spelling.`);
         return;
       }
-      const { name: resolvedName, latitude, longitude, country, admin1 } = results[0];
-      const displayName = [resolvedName, admin1, country].filter(Boolean).join(', ');
-      await saveSettings({ locationName: displayName, latitude, longitude });
+      const { name: n, latitude, longitude, country, admin1 } = results[0];
+      const displayName = [n, admin1, country].filter(Boolean).join(', ');
+      const newLoc = await addLocation({ name: displayName, latitude, longitude });
       await clearWeatherCache();
-      setSettings(prev => prev ? { ...prev, locationName: displayName, latitude, longitude } : prev);
-      setLocationDraft(displayName);
-      Alert.alert('Location saved', `Using "${displayName}".`);
+      setSettings(prev => prev ? { ...prev, locations: [...prev.locations, newLoc] } : prev);
+      setCityDraft('');
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not geocode location.');
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not add location.');
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleUseGPS() {
+  async function handleAddGPS() {
     setSaving(true);
     try {
-      const coords = await requestDeviceLocation();
+      const coords      = await requestDeviceLocation();
       const displayName = await reverseGeocode(coords.latitude, coords.longitude);
-      await saveSettings({ locationName: displayName, latitude: coords.latitude, longitude: coords.longitude });
+      const newLoc      = await addLocation({ name: displayName, ...coords });
       await clearWeatherCache();
-      setSettings(prev => prev ? { ...prev, locationName: displayName, ...coords } : prev);
-      setLocationDraft(displayName);
-      Alert.alert('Location updated', `Using "${displayName}".`);
+      setSettings(prev => prev ? { ...prev, locations: [...prev.locations, newLoc] } : prev);
     } catch (e) {
       Alert.alert('Location error', e instanceof Error ? e.message : 'Could not get GPS location.');
     } finally {
@@ -115,14 +124,33 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleRemoveLocation(loc: Location) {
+    Alert.alert(
+      'Remove location',
+      `Remove "${loc.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove', style: 'destructive',
+          onPress: async () => {
+            await removeLocation(loc.id);
+            await clearWeatherCache();
+            setSettings(prev =>
+              prev ? { ...prev, locations: prev.locations.filter(l => l.id !== loc.id) } : prev,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  // ── Reminder handlers ────────────────────────────────────────────────────────
+
   async function handleReminderToggle(value: boolean) {
     if (value) {
       const granted = await requestNotificationPermission();
       if (!granted) {
-        Alert.alert(
-          'Permission required',
-          'Enable notifications in your device settings to use this feature.',
-        );
+        Alert.alert('Permission required', 'Enable notifications in your device settings.');
         return;
       }
       await saveSettings({ reminderEnabled: true });
@@ -139,28 +167,19 @@ export default function SettingsScreen() {
     setShowTimePicker(false);
     await saveSettings({ reminderTime: hhmm });
     setSettings(prev => prev ? { ...prev, reminderTime: hhmm } : prev);
-    // Reschedule only if the reminder is currently active
-    if (settings?.reminderEnabled) {
-      await scheduleDailyReminder(hhmm);
-    }
+    if (settings?.reminderEnabled) await scheduleDailyReminder(hhmm);
   }
 
-  function handleUpgrade() {
-    setShowUpgrade(true);
-  }
+  // ── Premium ──────────────────────────────────────────────────────────────────
 
-  function handlePurchased() {
-    setIsPremium(true);
-    setSettings(prev => prev ? { ...prev } : prev);
-  }
+  function handlePurchased() { setIsPremium(true); }
 
-  // Dev-only: toggle mock premium without billing
   async function handleMockPremiumToggle(value: boolean) {
     await setMockPremium(value);
     setIsPremium(value);
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Loading state ────────────────────────────────────────────────────────────
 
   if (!settings) {
     return (
@@ -170,47 +189,89 @@ export default function SettingsScreen() {
     );
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll}>
 
-        {/* ── Location ─────────────────────────────────────────────────────── */}
-        <SectionHeader title="Location" />
+        {/* ── Locations ────────────────────────────────────────────────────── */}
+        <SectionHeader title={`Locations (${locations.length} / ${maxLocations})`} />
         <Card>
-          <Row>
-            <Text style={styles.rowLabel}>City name</Text>
-          </Row>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              value={locationDraft}
-              onChangeText={setLocationDraft}
-              placeholder="e.g. Warsaw"
-              placeholderTextColor={COLORS.textSecondary}
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleSaveLocation}
-            />
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-              onPress={handleSaveLocation}
-              disabled={saving}
-            >
-              {saving
-                ? <ActivityIndicator size="small" color={COLORS.white} />
-                : <Text style={styles.saveButtonText}>Save</Text>
-              }
-            </TouchableOpacity>
-          </View>
-          <Row last>
-            <TouchableOpacity
-              style={[styles.gpsButton, saving && styles.saveButtonDisabled]}
-              onPress={handleUseGPS}
-              disabled={saving}
-            >
-              <Text style={styles.gpsButtonText}>📍  Use my current location</Text>
-            </TouchableOpacity>
-          </Row>
+          {/* Saved locations list */}
+          {locations.length === 0 && (
+            <Row last>
+              <Text style={styles.hintText}>No location added yet.</Text>
+            </Row>
+          )}
+          {locations.map((loc, idx) => (
+            <Row key={loc.id} last={idx === locations.length - 1 && !canAdd}>
+              <Text style={styles.locationName} numberOfLines={1}>{loc.name}</Text>
+              <TouchableOpacity
+                onPress={() => handleRemoveLocation(loc)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.removeBtn}
+              >
+                <Text style={styles.removeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </Row>
+          ))}
+
+          {/* Add location form — shown when under the limit */}
+          {canAdd && (
+            <>
+              <View style={styles.addRow}>
+                <TextInput
+                  style={styles.input}
+                  value={cityDraft}
+                  onChangeText={setCityDraft}
+                  placeholder="Search city…"
+                  placeholderTextColor={COLORS.textSecondary}
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  onSubmitEditing={handleAddCity}
+                  editable={!saving}
+                />
+                <TouchableOpacity
+                  style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                  onPress={handleAddCity}
+                  disabled={saving}
+                >
+                  {saving
+                    ? <ActivityIndicator size="small" color={COLORS.white} />
+                    : <Text style={styles.saveButtonText}>Add</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+              <Row last>
+                <TouchableOpacity
+                  style={[styles.gpsButton, saving && styles.saveButtonDisabled]}
+                  onPress={handleAddGPS}
+                  disabled={saving}
+                >
+                  <Text style={styles.gpsButtonText}>📍  Use my current location</Text>
+                </TouchableOpacity>
+              </Row>
+            </>
+          )}
+
+          {/* Upgrade prompt when free user hits the limit */}
+          {!canAdd && !isPremium && (
+            <Row last>
+              <View style={styles.lockedRow}>
+                <Text style={styles.lockIcon}>🔒</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lockedTitle}>Premium feature</Text>
+                  <Text style={styles.hintText}>
+                    Upgrade to track up to {MAX_LOCATIONS_PREMIUM} locations.
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.upgradeChip} onPress={() => setShowUpgrade(true)}>
+                  <Text style={styles.upgradeChipText}>Upgrade</Text>
+                </TouchableOpacity>
+              </View>
+            </Row>
+          )}
         </Card>
 
         {/* ── Daily reminder ────────────────────────────────────────────────── */}
@@ -246,25 +307,25 @@ export default function SettingsScreen() {
               <Text style={styles.lockIcon}>🔒</Text>
               <View style={styles.lockedText}>
                 <Text style={styles.lockedTitle}>Premium feature</Text>
-                <Text style={styles.lockedSubtitle}>
+                <Text style={styles.hintText}>
                   Get a daily push notification with today's watering recommendation.
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
+            <TouchableOpacity style={styles.upgradeButton} onPress={() => setShowUpgrade(true)}>
               <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
             </TouchableOpacity>
           </Card>
         )}
 
-        {/* ── Premium status ────────────────────────────────────────────────── */}
+        {/* ── Plan ─────────────────────────────────────────────────────────── */}
         <SectionHeader title="Plan" />
         {isPremium ? (
           <Card>
             <Row last>
               <View>
                 <Text style={styles.premiumActiveTitle}>⭐ You're on Premium</Text>
-                <Text style={styles.hintText}>No ads · Daily reminder notification</Text>
+                <Text style={styles.hintText}>No ads · Up to 4 locations · Daily reminder</Text>
               </View>
             </Row>
           </Card>
@@ -273,22 +334,22 @@ export default function SettingsScreen() {
             <Row>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowLabel}>Free plan</Text>
-                <Text style={styles.hintText}>Banner ad shown · No reminders</Text>
+                <Text style={styles.hintText}>1 location · Banner ads · No reminders</Text>
               </View>
             </Row>
             <Row last>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowLabel}>Premium</Text>
-                <Text style={styles.hintText}>No ads · Daily reminder notification</Text>
+                <Text style={styles.hintText}>Up to 4 locations · No ads · Daily reminder</Text>
               </View>
-              <TouchableOpacity style={styles.upgradeChip} onPress={handleUpgrade}>
+              <TouchableOpacity style={styles.upgradeChip} onPress={() => setShowUpgrade(true)}>
                 <Text style={styles.upgradeChipText}>Upgrade</Text>
               </TouchableOpacity>
             </Row>
           </Card>
         )}
 
-        {/* ── Dev tools (only in development builds / Expo Go) ──────────────── */}
+        {/* ── Developer Tools ───────────────────────────────────────────────── */}
         {__DEV__ && (
           <>
             <SectionHeader title="Developer Tools" />
@@ -296,10 +357,7 @@ export default function SettingsScreen() {
               <Row last>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowLabel}>Mock premium</Text>
-                  <Text style={styles.hintText}>
-                    Toggle premium UI without billing.{'\n'}
-                    Removed automatically in production.
-                  </Text>
+                  <Text style={styles.hintText}>Toggle premium UI without billing.</Text>
                 </View>
                 <Switch
                   value={isPremium}
@@ -396,12 +454,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 18,
   },
-  inputRow: {
+  locationName: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  removeBtn: {
+    padding: SPACING.xs,
+  },
+  removeBtnText: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+  addRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
     gap: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   input: {
     flex: 1,
@@ -421,7 +495,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 64,
+    minWidth: 56,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -455,11 +529,9 @@ const styles = StyleSheet.create({
   },
   lockedRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     padding: SPACING.md,
     gap: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   lockIcon: {
     fontSize: FONT_SIZE.xl,
@@ -472,11 +544,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: 2,
-  },
-  lockedSubtitle: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
   },
   upgradeButton: {
     margin: SPACING.md,
@@ -492,7 +559,7 @@ const styles = StyleSheet.create({
   },
   upgradeChip: {
     backgroundColor: COLORS.primaryLight,
-    borderRadius: BR.full,
+    borderRadius: BORDER_RADIUS.full,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
   },

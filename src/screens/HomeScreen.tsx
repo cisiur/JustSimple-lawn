@@ -5,162 +5,143 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
-  ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { DecisionBadge } from '../components/DecisionBadge';
-import { WeatherSummary } from '../components/WeatherSummary';
+import { LocationCard } from '../components/LocationCard';
+import type { LocationResult } from '../components/LocationCard';
 import { PremiumBadge } from '../components/PremiumBadge';
 import { AdBanner } from '../ads/AdBanner';
 import { getPremiumStatus } from '../premium/premiumService';
 import { evaluateWatering } from '../rules/wateringRules';
 import { fetchForecastWithCache } from '../weather/weatherService';
 import { loadSettings } from '../storage/storageService';
-import type { WateringDecision } from '../weather/weatherTypes';
 import type { RootTabParamList } from '../navigation/AppNavigator';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 
 type NavProp = BottomTabNavigationProp<RootTabParamList, 'Home'>;
 
-// ─── State shape ──────────────────────────────────────────────────────────────
+// ─── State ────────────────────────────────────────────────────────────────────
 
-type Status = 'loading' | 'no-location' | 'ready' | 'error';
+type GlobalStatus = 'loading' | 'no-location' | 'ready';
 
 interface ScreenState {
-  status: Status;
-  decision: WateringDecision | null;
-  locationName: string;
-  isPremium: boolean;
-  error: string | null;
+  globalStatus: GlobalStatus;
+  results:      LocationResult[];
+  isPremium:    boolean;
 }
 
-const INITIAL_STATE: ScreenState = {
-  status: 'loading',
-  decision: null,
-  locationName: '',
-  isPremium: false,
-  error: null,
+const INITIAL: ScreenState = {
+  globalStatus: 'loading',
+  results:      [],
+  isPremium:    false,
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavProp>();
-  const [state, setState] = useState<ScreenState>(INITIAL_STATE);
+  const [state, setState] = useState<ScreenState>(INITIAL);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else setState(prev => ({ ...prev, status: 'loading', error: null }));
+    else setState(prev => ({ ...prev, globalStatus: 'loading' }));
 
-    try {
-      const [settings, { isPremium }] = await Promise.all([
-        loadSettings(),
-        getPremiumStatus(),
-      ]);
+    const [settings, { isPremium }] = await Promise.all([
+      loadSettings(),
+      getPremiumStatus(),
+    ]);
 
-      if (!settings.latitude || !settings.longitude) {
-        setState({
-          status: 'no-location',
-          decision: null,
-          locationName: '',
-          isPremium,
-          error: null,
-        });
-        return;
-      }
-
-      const weather = await fetchForecastWithCache(
-        settings.latitude,
-        settings.longitude,
-      );
-      const decision = evaluateWatering(weather);
-
-      setState({
-        status: 'ready',
-        decision,
-        locationName: settings.locationName,
-        isPremium,
-        error: null,
-      });
-    } catch (e) {
-      const message =
-        e instanceof Error ? e.message : 'Something went wrong.';
-      setState(prev => ({
-        ...prev,
-        status: 'error',
-        error: `Could not load weather data.\n${message}`,
-      }));
-    } finally {
+    if (!settings.locations.length) {
+      setState({ globalStatus: 'no-location', results: [], isPremium });
       setRefreshing(false);
+      return;
     }
+
+    // Show loading skeletons immediately
+    setState({
+      globalStatus: 'ready',
+      results: settings.locations.map(loc => ({
+        location: loc,
+        status:   'loading',
+        decision: null,
+        error:    null,
+      })),
+      isPremium,
+    });
+
+    // Fetch all locations in parallel
+    const settled = await Promise.allSettled(
+      settings.locations.map(loc =>
+        fetchForecastWithCache(loc.latitude, loc.longitude),
+      ),
+    );
+
+    const results: LocationResult[] = settings.locations.map((loc, i) => {
+      const r = settled[i];
+      if (r.status === 'fulfilled') {
+        return {
+          location: loc,
+          status:   'ready',
+          decision: evaluateWatering(r.value),
+          error:    null,
+        };
+      }
+      return {
+        location: loc,
+        status:   'error',
+        decision: null,
+        error:    r.reason instanceof Error ? r.reason.message : 'Something went wrong.',
+      };
+    });
+
+    setState({ globalStatus: 'ready', results, isPremium });
+    setRefreshing(false);
   }, []);
 
-  // Reload every time this tab becomes active (e.g. after saving location)
+  // Reload whenever this tab becomes active
   useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+    useCallback(() => { load(); }, [load]),
   );
 
-  const { status, decision, locationName, isPremium, error } = state;
+  const { globalStatus, results, isPremium } = state;
 
-  function renderContent() {
-    switch (status) {
-      case 'loading':
-        return (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Fetching weather…</Text>
-          </View>
-        );
+  // ── Render ──────────────────────────────────────────────────────────────────
 
-      case 'no-location':
-        return (
-          <View style={styles.center}>
-            <Text style={styles.noLocEmoji}>📍</Text>
-            <Text style={styles.noLocTitle}>No location set</Text>
-            <Text style={styles.noLocBody}>
-              Set your city in Settings to get today's watering recommendation.
-            </Text>
-            <TouchableOpacity
-              style={styles.goToSettingsBtn}
-              onPress={() => navigation.navigate('Settings')}
-            >
-              <Text style={styles.goToSettingsBtnText}>Open Settings</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'error':
-        return (
-          <View style={styles.errorCard}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        );
-
-      case 'ready':
-        if (!decision) return null;
-        return (
-          <>
-            <DecisionBadge decision={decision.decision} reason={decision.reason} />
-            <AdBanner visible={!isPremium} placement="inline" />
-            <Text style={styles.sectionLabel}>Weather summary</Text>
-            <WeatherSummary
-              recentRainMm={decision.recentRainMm}
-              expectedRainMm={decision.expectedRainMm}
-              todayMaxTempC={decision.todayMaxTempC}
-            />
-            <Text style={styles.updateNote}>
-              Pull down to refresh · data updates every 30 min
-            </Text>
-          </>
-        );
-    }
+  if (globalStatus === 'loading') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <View style={styles.center}>
+          <Text style={styles.loadingText}>Loading…</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
+
+  if (globalStatus === 'no-location') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <View style={styles.center}>
+          <Text style={styles.noLocEmoji}>📍</Text>
+          <Text style={styles.noLocTitle}>No location set</Text>
+          <Text style={styles.noLocBody}>
+            Set your city in Settings to get today's watering recommendation.
+          </Text>
+          <TouchableOpacity
+            style={styles.goToSettingsBtn}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.goToSettingsBtnText}>Open Settings</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const multiLoc = results.length > 1;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -174,20 +155,44 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Header */}
-        {(status === 'ready' || status === 'error') && (
+        {/* Header — only when single location (name comes from card when multi) */}
+        {!multiLoc && (
           <View style={styles.header}>
             <View style={styles.locationRow}>
               <Text style={styles.locationIcon}>📍</Text>
               <Text style={styles.location} numberOfLines={1}>
-                {locationName || 'Unknown location'}
+                {results[0]?.location.name || 'Unknown location'}
               </Text>
             </View>
             <PremiumBadge isPremium={isPremium} />
           </View>
         )}
 
-        {renderContent()}
+        {multiLoc && (
+          <View style={styles.headerMulti}>
+            <Text style={styles.headerMultiTitle}>Today</Text>
+            <PremiumBadge isPremium={isPremium} />
+          </View>
+        )}
+
+        {/* Location cards — one per saved location */}
+        {results.map((result, index) => (
+          <View key={result.location.id}>
+            <LocationCard result={result} showName={multiLoc} />
+
+            {/* Inline ad after the first card only (free users) */}
+            {index === 0 && (
+              <AdBanner visible={!isPremium} placement="inline" />
+            )}
+
+            {/* Divider between cards */}
+            {index < results.length - 1 && <View style={styles.divider} />}
+          </View>
+        ))}
+
+        <Text style={styles.updateNote}>
+          Pull down to refresh · data updates every 30 min
+        </Text>
       </ScrollView>
 
       <AdBanner visible={!isPremium} placement="bottom" />
@@ -206,6 +211,44 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: SPACING.lg,
     gap: SPACING.md,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+    padding: SPACING.xl,
+  },
+  loadingText: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textSecondary,
+  },
+  noLocEmoji: {
+    fontSize: FONT_SIZE.hero,
+  },
+  noLocTitle: {
+    fontSize: FONT_SIZE.xl,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  noLocBody: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  goToSettingsBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  goToSettingsBtnText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.md,
+    fontWeight: '700',
   },
   header: {
     flexDirection: 'row',
@@ -228,62 +271,21 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     flex: 1,
   },
-  center: {
-    flex: 1,
+  headerMulti: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.md,
-    paddingVertical: SPACING.xxl,
+    marginBottom: SPACING.xs,
   },
-  loadingText: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
-  },
-  noLocEmoji: {
-    fontSize: FONT_SIZE.hero,
-  },
-  noLocTitle: {
+  headerMultiTitle: {
     fontSize: FONT_SIZE.xl,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
-  noLocBody: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: SPACING.lg,
-  },
-  goToSettingsBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.md,
-    marginTop: SPACING.sm,
-  },
-  goToSettingsBtnText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZE.md,
-    fontWeight: '700',
-  },
-  errorCard: {
-    backgroundColor: COLORS.redLight,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-  },
-  errorText: {
-    fontSize: FONT_SIZE.md,
-    color: COLORS.red,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  sectionLabel: {
-    fontSize: FONT_SIZE.sm,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: SPACING.xs,
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.lg,
   },
   updateNote: {
     fontSize: FONT_SIZE.xs,
