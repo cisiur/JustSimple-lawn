@@ -13,11 +13,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { TimePickerModal } from '../components/TimePickerModal';
+import { UpgradeModal } from '../premium/UpgradeModal';
 import { loadSettings, saveSettings, AppSettings } from '../storage/storageService';
 import { getPremiumStatus, setMockPremium } from '../premium/premiumService';
 import { geocodeCity } from '../weather/weatherService';
 import { requestDeviceLocation, reverseGeocode } from '../services/locationService';
 import { clearWeatherCache } from '../storage/storageService';
+import {
+  requestNotificationPermission,
+  scheduleDailyReminder,
+  cancelDailyReminder,
+} from '../notifications/notificationService';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS, BORDER_RADIUS as BR } from '../constants/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -49,6 +55,7 @@ export default function SettingsScreen() {
   const [locationDraft, setLocationDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Reload every time this tab is focused
   useFocusEffect(
@@ -109,24 +116,42 @@ export default function SettingsScreen() {
   }
 
   async function handleReminderToggle(value: boolean) {
-    await saveSettings({ reminderEnabled: value });
-    setSettings(prev => prev ? { ...prev, reminderEnabled: value } : prev);
-    // TODO: schedule / cancel notification in Batch 3f
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Permission required',
+          'Enable notifications in your device settings to use this feature.',
+        );
+        return;
+      }
+      await saveSettings({ reminderEnabled: true });
+      setSettings(prev => prev ? { ...prev, reminderEnabled: true } : prev);
+      await scheduleDailyReminder(settings?.reminderTime ?? '08:00');
+    } else {
+      await saveSettings({ reminderEnabled: false });
+      setSettings(prev => prev ? { ...prev, reminderEnabled: false } : prev);
+      await cancelDailyReminder();
+    }
   }
 
   async function handleTimeConfirm(hhmm: string) {
     setShowTimePicker(false);
     await saveSettings({ reminderTime: hhmm });
     setSettings(prev => prev ? { ...prev, reminderTime: hhmm } : prev);
-    // TODO: reschedule notification in Batch 3f
+    // Reschedule only if the reminder is currently active
+    if (settings?.reminderEnabled) {
+      await scheduleDailyReminder(hhmm);
+    }
   }
 
-  // TODO: REVENUECAT — replace with real Purchases.purchasePackage() flow
   function handleUpgrade() {
-    Alert.alert(
-      'Upgrade to Premium',
-      'RevenueCat purchase flow will be wired here in a later build.\n\nFor now use the dev toggle below to test premium UI.',
-    );
+    setShowUpgrade(true);
+  }
+
+  function handlePurchased() {
+    setIsPremium(true);
+    setSettings(prev => prev ? { ...prev } : prev);
   }
 
   // Dev-only: toggle mock premium without billing
@@ -299,6 +324,12 @@ export default function SettingsScreen() {
 
         <View style={{ height: SPACING.xl }} />
       </ScrollView>
+
+      <UpgradeModal
+        visible={showUpgrade}
+        onDismiss={() => setShowUpgrade(false)}
+        onPurchased={handlePurchased}
+      />
 
       <TimePickerModal
         visible={showTimePicker}

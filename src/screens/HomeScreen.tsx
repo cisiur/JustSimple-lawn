@@ -147,6 +147,7 @@ export default function HomeScreen() {
         return (
           <>
             <DecisionBadge decision={decision.decision} reason={decision.reason} />
+            <AdBanner visible={!isPremium} />
             <Text style={styles.sectionLabel}>Weather summary</Text>
             <WeatherSummary
               recentRainMm={decision.recentRainMm}
