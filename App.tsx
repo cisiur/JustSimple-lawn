@@ -1,18 +1,11 @@
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { configureNotificationHandler } from './src/notifications/notificationService';
+import { configureRevenueCat } from './src/premium/premiumService';
 
-// Configure foreground notification behaviour once at startup
+// Initialise services once at startup
 configureNotificationHandler();
-
-// TODO: REVENUECAT — uncomment after installing react-native-purchases and creating dev build:
-// import Purchases from 'react-native-purchases';
-// import Constants from 'expo-constants';
-// import { Platform } from 'react-native';
-// const rcKey = Platform.OS === 'android'
-//   ? Constants.expoConfig?.extra?.revenueCatKeyAndroid
-//   : Constants.expoConfig?.extra?.revenueCatKeyIos;
-// if (rcKey) Purchases.configure({ apiKey: rcKey });
+configureRevenueCat(); // no-op in Expo Go; activates automatically in dev/production build
 
 export default function App() {
   return (

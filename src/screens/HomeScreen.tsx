@@ -147,7 +147,7 @@ export default function HomeScreen() {
         return (
           <>
             <DecisionBadge decision={decision.decision} reason={decision.reason} />
-            <AdBanner visible={!isPremium} />
+            <AdBanner visible={!isPremium} placement="inline" />
             <Text style={styles.sectionLabel}>Weather summary</Text>
             <WeatherSummary
               recentRainMm={decision.recentRainMm}
@@ -190,7 +190,7 @@ export default function HomeScreen() {
         {renderContent()}
       </ScrollView>
 
-      <AdBanner visible={!isPremium} />
+      <AdBanner visible={!isPremium} placement="bottom" />
     </SafeAreaView>
   );
 }

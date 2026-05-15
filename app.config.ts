@@ -3,6 +3,13 @@ import type { ExpoConfig } from 'expo/config';
 // Expo CLI automatically reads .env from the project root.
 // All process.env variables below must be declared in .env (see .env.example).
 
+// Google's official test IDs — safe to use in dev builds before real IDs arrive.
+const TEST_ADMOB_APP_ID_ANDROID = 'ca-app-pub-3940256099942544~3347511713';
+const TEST_ADMOB_APP_ID_IOS     = 'ca-app-pub-3940256099942544~1458002511';
+
+const admobAppIdAndroid = process.env.ADMOB_APP_ID_ANDROID || TEST_ADMOB_APP_ID_ANDROID;
+const admobAppIdIos     = process.env.ADMOB_APP_ID_IOS     || TEST_ADMOB_APP_ID_IOS;
+
 const config: ExpoConfig = {
   name: 'JustSimple Lawn',
   slug: 'justsimple-lawn',
@@ -10,7 +17,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
-  newArchEnabled: true,
+  newArchEnabled: false, // disabled until AdMob + RevenueCat fully support new arch
   splash: {
     image: './assets/splash-icon.png',
     resizeMode: 'contain',
@@ -41,16 +48,26 @@ const config: ExpoConfig = {
         color: '#4CAF50',
       },
     ],
+    [
+      'react-native-google-mobile-ads',
+      {
+        androidAppId: admobAppIdAndroid,
+        iosAppId:     admobAppIdIos,
+      },
+    ],
   ],
   extra: {
-    // TODO: ADMOB — insert real ad unit IDs before production build
-    admobAppIdAndroid: process.env.ADMOB_APP_ID_ANDROID ?? '',
-    admobBannerAndroid: process.env.ADMOB_BANNER_AD_UNIT_ANDROID ?? '',
-    admobAppIdIos: process.env.ADMOB_APP_ID_IOS ?? '',
-    admobBannerIos: process.env.ADMOB_BANNER_AD_UNIT_IOS ?? '',
-    // TODO: REVENUECAT — insert real public SDK keys before production build
+    eas: {
+      projectId: 'ede092fd-706d-4209-b50e-75caf0ac624c',
+    },
+    admobAppIdAndroid,
+    admobAppIdIos,
+    admobBannerBottomAndroid: process.env.ADMOB_BANNER_BOTTOM_ANDROID ?? '',
+    admobBannerBottomIos:     process.env.ADMOB_BANNER_BOTTOM_IOS     ?? '',
+    admobBannerInlineAndroid: process.env.ADMOB_BANNER_INLINE_ANDROID ?? '',
+    admobBannerInlineIos:     process.env.ADMOB_BANNER_INLINE_IOS     ?? '',
     revenueCatKeyAndroid: process.env.REVENUECAT_API_KEY_ANDROID ?? '',
-    revenueCatKeyIos: process.env.REVENUECAT_API_KEY_IOS ?? '',
+    revenueCatKeyIos:     process.env.REVENUECAT_API_KEY_IOS     ?? '',
   },
 };
 
