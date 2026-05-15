@@ -15,6 +15,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { TimePickerModal } from '../components/TimePickerModal';
 import { loadSettings, saveSettings, AppSettings } from '../storage/storageService';
 import { getPremiumStatus, setMockPremium } from '../premium/premiumService';
+import { geocodeCity } from '../weather/weatherService';
+import { requestDeviceLocation, reverseGeocode } from '../services/locationService';
+import { clearWeatherCache } from '../storage/storageService';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS, BORDER_RADIUS as BR } from '../constants/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,11 +71,41 @@ export default function SettingsScreen() {
     const name = locationDraft.trim();
     if (!name) { Alert.alert('Enter a city name first.'); return; }
     setSaving(true);
-    // TODO: replace with real geocoding in Batch 3e (resolve coords from city name)
-    await saveSettings({ locationName: name, latitude: null, longitude: null });
-    setSettings(prev => prev ? { ...prev, locationName: name } : prev);
-    setSaving(false);
-    Alert.alert('Location saved', `Using "${name}" as your location.`);
+    try {
+      const results = await geocodeCity(name);
+      if (!results.length) {
+        Alert.alert('City not found', `"${name}" did not return any results. Try a different spelling.`);
+        return;
+      }
+      const { name: resolvedName, latitude, longitude, country, admin1 } = results[0];
+      const displayName = [resolvedName, admin1, country].filter(Boolean).join(', ');
+      await saveSettings({ locationName: displayName, latitude, longitude });
+      await clearWeatherCache();
+      setSettings(prev => prev ? { ...prev, locationName: displayName, latitude, longitude } : prev);
+      setLocationDraft(displayName);
+      Alert.alert('Location saved', `Using "${displayName}".`);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not geocode location.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUseGPS() {
+    setSaving(true);
+    try {
+      const coords = await requestDeviceLocation();
+      const displayName = await reverseGeocode(coords.latitude, coords.longitude);
+      await saveSettings({ locationName: displayName, latitude: coords.latitude, longitude: coords.longitude });
+      await clearWeatherCache();
+      setSettings(prev => prev ? { ...prev, locationName: displayName, ...coords } : prev);
+      setLocationDraft(displayName);
+      Alert.alert('Location updated', `Using "${displayName}".`);
+    } catch (e) {
+      Alert.alert('Location error', e instanceof Error ? e.message : 'Could not get GPS location.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleReminderToggle(value: boolean) {
@@ -145,10 +178,13 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
           <Row last>
-            <Text style={styles.hintText}>
-              {/* TODO: add GPS button in Batch 3e */}
-              GPS detection will be added in a future update.
-            </Text>
+            <TouchableOpacity
+              style={[styles.gpsButton, saving && styles.saveButtonDisabled]}
+              onPress={handleUseGPS}
+              disabled={saving}
+            >
+              <Text style={styles.gpsButtonText}>📍  Use my current location</Text>
+            </TouchableOpacity>
           </Row>
         </Card>
 
@@ -363,6 +399,15 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '700',
     fontSize: FONT_SIZE.md,
+  },
+  gpsButton: {
+    flex: 1,
+    paddingVertical: SPACING.xs,
+  },
+  gpsButtonText: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
   timeButton: {
     backgroundColor: COLORS.surface,

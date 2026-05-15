@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,103 +6,160 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { DecisionBadge } from '../components/DecisionBadge';
 import { WeatherSummary } from '../components/WeatherSummary';
 import { PremiumBadge } from '../components/PremiumBadge';
 import { AdBanner } from '../ads/AdBanner';
 import { getPremiumStatus } from '../premium/premiumService';
 import { evaluateWatering } from '../rules/wateringRules';
-import { WateringDecision } from '../weather/weatherTypes';
+import { fetchForecastWithCache } from '../weather/weatherService';
+import { loadSettings } from '../storage/storageService';
+import type { WateringDecision } from '../weather/weatherTypes';
+import type { RootTabParamList } from '../navigation/AppNavigator';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 
-// ─── Mocked data ──────────────────────────────────────────────────────────────
-// Replaced with real Open-Meteo data in Batch 3e.
+type NavProp = BottomTabNavigationProp<RootTabParamList, 'Home'>;
 
-const MOCK_WEATHER = {
-  hourly: {
-    // 72 hours: 24h past + 48h future (Open-Meteo format with past_days=1)
-    time: Array.from({ length: 72 }, (_, i) => {
-      const d = new Date();
-      d.setMinutes(0, 0, 0);
-      d.setHours(d.getHours() - 24 + i);
-      return d.toISOString().slice(0, 16);
-    }),
-    precipitation: Array.from({ length: 72 }, (_, i) => {
-      // Simulate 2mm of rain 20 hours ago, dry otherwise
-      return i === 4 ? 2 : 0;
-    }),
-    temperature2m: Array.from({ length: 72 }, (_, i) => 18 + Math.sin(i / 6) * 5),
-  },
-  daily: {
-    time: ['yesterday', 'today', 'tomorrow'].map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - 1 + i);
-      return d.toISOString().slice(0, 10);
-    }),
-    precipitationSum: [2, 0, 0],
-    temperature2mMax: [20, 24, 26],
-  },
-  timezone: 'auto',
-};
+// ─── State shape ──────────────────────────────────────────────────────────────
 
-const MOCK_LOCATION = 'Warsaw, Poland';
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
+type Status = 'loading' | 'no-location' | 'ready' | 'error';
 
 interface ScreenState {
-  loading: boolean;
-  refreshing: boolean;
-  isPremium: boolean;
+  status: Status;
   decision: WateringDecision | null;
+  locationName: string;
+  isPremium: boolean;
   error: string | null;
 }
 
+const INITIAL_STATE: ScreenState = {
+  status: 'loading',
+  decision: null,
+  locationName: '',
+  isPremium: false,
+  error: null,
+};
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function HomeScreen() {
-  const [state, setState] = useState<ScreenState>({
-    loading: true,
-    refreshing: false,
-    isPremium: false,
-    decision: null,
-    error: null,
-  });
+  const navigation = useNavigation<NavProp>();
+  const [state, setState] = useState<ScreenState>(INITIAL_STATE);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
-    setState(prev => ({
-      ...prev,
-      loading: !isRefresh,
-      refreshing: isRefresh,
-      error: null,
-    }));
+    if (isRefresh) setRefreshing(true);
+    else setState(prev => ({ ...prev, status: 'loading', error: null }));
 
     try {
-      // TODO: replace MOCK_WEATHER with real weatherService.fetchWeather() in Batch 3e
-      const decision = evaluateWatering(MOCK_WEATHER);
-      const { isPremium } = await getPremiumStatus();
+      const [settings, { isPremium }] = await Promise.all([
+        loadSettings(),
+        getPremiumStatus(),
+      ]);
 
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        refreshing: false,
-        isPremium,
+      if (!settings.latitude || !settings.longitude) {
+        setState({
+          status: 'no-location',
+          decision: null,
+          locationName: '',
+          isPremium,
+          error: null,
+        });
+        return;
+      }
+
+      const weather = await fetchForecastWithCache(
+        settings.latitude,
+        settings.longitude,
+      );
+      const decision = evaluateWatering(weather);
+
+      setState({
+        status: 'ready',
         decision,
-      }));
+        locationName: settings.locationName,
+        isPremium,
+        error: null,
+      });
     } catch (e) {
+      const message =
+        e instanceof Error ? e.message : 'Something went wrong.';
       setState(prev => ({
         ...prev,
-        loading: false,
-        refreshing: false,
-        error: 'Could not load weather data. Pull down to retry.',
+        status: 'error',
+        error: `Could not load weather data.\n${message}`,
       }));
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Reload every time this tab becomes active (e.g. after saving location)
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
-  const { loading, refreshing, isPremium, decision, error } = state;
+  const { status, decision, locationName, isPremium, error } = state;
+
+  function renderContent() {
+    switch (status) {
+      case 'loading':
+        return (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Fetching weather…</Text>
+          </View>
+        );
+
+      case 'no-location':
+        return (
+          <View style={styles.center}>
+            <Text style={styles.noLocEmoji}>📍</Text>
+            <Text style={styles.noLocTitle}>No location set</Text>
+            <Text style={styles.noLocBody}>
+              Set your city in Settings to get today's watering recommendation.
+            </Text>
+            <TouchableOpacity
+              style={styles.goToSettingsBtn}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Text style={styles.goToSettingsBtnText}>Open Settings</Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'error':
+        return (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        );
+
+      case 'ready':
+        if (!decision) return null;
+        return (
+          <>
+            <DecisionBadge decision={decision.decision} reason={decision.reason} />
+            <Text style={styles.sectionLabel}>Weather summary</Text>
+            <WeatherSummary
+              recentRainMm={decision.recentRainMm}
+              expectedRainMm={decision.expectedRainMm}
+              todayMaxTempC={decision.todayMaxTempC}
+            />
+            <Text style={styles.updateNote}>
+              Pull down to refresh · data updates every 30 min
+            </Text>
+          </>
+        );
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -116,51 +173,28 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Header row */}
-        <View style={styles.header}>
-          <View style={styles.locationRow}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <Text style={styles.location} numberOfLines={1}>
-              {/* TODO: replace with real location from storageService in Batch 3e */}
-              {MOCK_LOCATION}
-            </Text>
+        {/* Header */}
+        {(status === 'ready' || status === 'error') && (
+          <View style={styles.header}>
+            <View style={styles.locationRow}>
+              <Text style={styles.locationIcon}>📍</Text>
+              <Text style={styles.location} numberOfLines={1}>
+                {locationName || 'Unknown location'}
+              </Text>
+            </View>
+            <PremiumBadge isPremium={isPremium} />
           </View>
-          <PremiumBadge isPremium={isPremium} />
-        </View>
+        )}
 
-        {/* Main content */}
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Checking the weather…</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorCard}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : decision ? (
-          <>
-            <DecisionBadge decision={decision.decision} reason={decision.reason} />
-
-            <Text style={styles.sectionLabel}>Weather summary</Text>
-            <WeatherSummary
-              recentRainMm={decision.recentRainMm}
-              expectedRainMm={decision.expectedRainMm}
-              todayMaxTempC={decision.todayMaxTempC}
-            />
-
-            <Text style={styles.updateNote}>
-              Pull down to refresh · data updates every 30 min
-            </Text>
-          </>
-        ) : null}
+        {renderContent()}
       </ScrollView>
 
-      {/* Banner ad — hidden for premium users */}
       <AdBanner visible={!isPremium} />
     </SafeAreaView>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: {
@@ -204,6 +238,33 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     color: COLORS.textSecondary,
   },
+  noLocEmoji: {
+    fontSize: FONT_SIZE.hero,
+  },
+  noLocTitle: {
+    fontSize: FONT_SIZE.xl,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  noLocBody: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: SPACING.lg,
+  },
+  goToSettingsBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  goToSettingsBtnText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.md,
+    fontWeight: '700',
+  },
   errorCard: {
     backgroundColor: COLORS.redLight,
     borderRadius: BORDER_RADIUS.md,
@@ -213,6 +274,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     color: COLORS.red,
     textAlign: 'center',
+    lineHeight: 22,
   },
   sectionLabel: {
     fontSize: FONT_SIZE.sm,
