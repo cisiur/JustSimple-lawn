@@ -7,7 +7,9 @@ import type { ExpoConfig } from 'expo/config';
 const TEST_ADMOB_APP_ID_ANDROID = 'ca-app-pub-3940256099942544~3347511713';
 const TEST_ADMOB_APP_ID_IOS     = 'ca-app-pub-3940256099942544~1458002511';
 
-const admobAppIdAndroid = process.env.ADMOB_APP_ID_ANDROID || TEST_ADMOB_APP_ID_ANDROID;
+const REAL_ADMOB_APP_ID_ANDROID = 'ca-app-pub-2378155255627809~3394127748';
+
+const admobAppIdAndroid = process.env.ADMOB_APP_ID_ANDROID || REAL_ADMOB_APP_ID_ANDROID || TEST_ADMOB_APP_ID_ANDROID;
 const admobAppIdIos     = process.env.ADMOB_APP_ID_IOS     || TEST_ADMOB_APP_ID_IOS;
 
 const config: ExpoConfig = {
