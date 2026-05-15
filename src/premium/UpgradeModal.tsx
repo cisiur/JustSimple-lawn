@@ -15,23 +15,21 @@ import {
   restorePurchases,
   PremiumPackage,
 } from './premiumService';
+import { useI18n } from '../i18n/I18nContext';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 
-const PREMIUM_FEATURES = [
-  { icon: '🚫', text: 'No ads' },
-  { icon: '🔔', text: 'Daily reminder notification at your chosen time' },
-];
-
 interface UpgradeModalProps {
-  visible: boolean;
-  onDismiss: () => void;
+  visible:    boolean;
+  onDismiss:  () => void;
   onPurchased: () => void; // called after successful purchase or restore
 }
 
 export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalProps) {
-  const [packages, setPackages] = useState<PremiumPackage[]>([]);
-  const [selected, setSelected] = useState<PremiumPackage | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
+
+  const [packages, setPackages]                 = useState<PremiumPackage[]>([]);
+  const [selected, setSelected]                 = useState<PremiumPackage | null>(null);
+  const [loading, setLoading]                   = useState(false);
   const [loadingOfferings, setLoadingOfferings] = useState(true);
 
   useEffect(() => {
@@ -54,10 +52,10 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
         onPurchased();
         onDismiss();
       } else {
-        Alert.alert('Purchase cancelled', 'No charge was made.');
+        Alert.alert(t('premium.cancelled'), t('premium.cancelled.body'));
       }
     } catch (e) {
-      Alert.alert('Purchase failed', e instanceof Error ? e.message : 'Please try again.');
+      Alert.alert(t('premium.failed'), e instanceof Error ? e.message : t('premium.failed'));
     } finally {
       setLoading(false);
     }
@@ -68,18 +66,24 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
     try {
       const restored = await restorePurchases();
       if (restored) {
-        Alert.alert('Restored', 'Your premium access has been restored.', [
-          { text: 'OK', onPress: () => { onPurchased(); onDismiss(); } },
+        Alert.alert(t('premium.restored'), t('premium.restored.body'), [
+          { text: t('alert.ok'), onPress: () => { onPurchased(); onDismiss(); } },
         ]);
       } else {
-        Alert.alert('Nothing to restore', 'No previous purchase found for this account.');
+        Alert.alert(t('premium.nothingToRestore'), t('premium.nothingToRestore.body'));
       }
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not restore purchases.');
+      Alert.alert(t('alert.addError'), e instanceof Error ? e.message : t('alert.addError'));
     } finally {
       setLoading(false);
     }
   }
+
+  const PREMIUM_FEATURES: { icon: string; textKey: 'premium.feature.noAds' | 'premium.feature.reminder' | 'premium.feature.locations' }[] = [
+    { icon: '🚫', textKey: 'premium.feature.noAds' },
+    { icon: '🔔', textKey: 'premium.feature.reminder' },
+    { icon: '📍', textKey: 'premium.feature.locations' },
+  ];
 
   return (
     <Modal
@@ -93,15 +97,15 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
       <View style={styles.sheet}>
         {/* Header */}
         <View style={styles.handle} />
-        <Text style={styles.title}>⭐ Go Premium</Text>
-        <Text style={styles.subtitle}>One simple upgrade, better experience.</Text>
+        <Text style={styles.title}>{t('premium.title')}</Text>
+        <Text style={styles.subtitle}>{t('premium.subtitle')}</Text>
 
         {/* Feature list */}
         <View style={styles.features}>
           {PREMIUM_FEATURES.map(f => (
-            <View key={f.text} style={styles.featureRow}>
+            <View key={f.textKey} style={styles.featureRow}>
               <Text style={styles.featureIcon}>{f.icon}</Text>
-              <Text style={styles.featureText}>{f.text}</Text>
+              <Text style={styles.featureText}>{t(f.textKey)}</Text>
             </View>
           ))}
         </View>
@@ -118,7 +122,11 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
                 onPress={() => setSelected(pkg)}
               >
                 <Text style={[styles.planType, selected?.identifier === pkg.identifier && styles.planTypeSelected]}>
-                  {pkg.packageType === 'MONTHLY' ? 'Monthly' : pkg.packageType === 'ANNUAL' ? 'Annual' : pkg.packageType}
+                  {pkg.packageType === 'MONTHLY'
+                    ? t('premium.package.monthly')
+                    : pkg.packageType === 'ANNUAL'
+                    ? t('premium.package.annual')
+                    : pkg.packageType}
                 </Text>
                 <Text style={[styles.planPrice, selected?.identifier === pkg.identifier && styles.planPriceSelected]}>
                   {pkg.priceString}
@@ -137,21 +145,18 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
           {loading
             ? <ActivityIndicator color={COLORS.white} />
             : <Text style={styles.subscribeBtnText}>
-                Subscribe — {selected?.priceString ?? '…'}
+                {t('premium.subscribe', { price: selected?.priceString ?? '…' })}
               </Text>
           }
         </TouchableOpacity>
 
         {/* Restore */}
         <TouchableOpacity onPress={handleRestore} disabled={loading} style={styles.restoreBtn}>
-          <Text style={styles.restoreText}>Restore purchases</Text>
+          <Text style={styles.restoreText}>{t('premium.restore')}</Text>
         </TouchableOpacity>
 
         {/* Legal note */}
-        <Text style={styles.legal}>
-          {/* TODO: REVENUECAT — update with real subscription terms once store products are configured */}
-          Subscription renews automatically. Cancel anytime.
-        </Text>
+        <Text style={styles.legal}>{t('premium.legal')}</Text>
 
         <View style={{ height: Platform.OS === 'ios' ? SPACING.xl : SPACING.md }} />
       </View>
@@ -175,7 +180,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 20 },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 20 },
       android: { elevation: 16 },
     }),
   },

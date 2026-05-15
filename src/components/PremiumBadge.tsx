@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { useI18n } from '../i18n/I18nContext';
 import { COLORS, FONT_SIZE, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 interface PremiumBadgeProps {
@@ -6,10 +7,12 @@ interface PremiumBadgeProps {
 }
 
 export function PremiumBadge({ isPremium }: PremiumBadgeProps) {
+  const { t } = useI18n();
+
   return (
     <View style={[styles.badge, isPremium ? styles.premium : styles.free]}>
       <Text style={[styles.text, isPremium ? styles.premiumText : styles.freeText]}>
-        {isPremium ? '⭐ Premium' : 'Free plan'}
+        {isPremium ? t('badge.premium') : t('badge.free')}
       </Text>
     </View>
   );

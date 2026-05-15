@@ -1,5 +1,6 @@
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { I18nProvider } from './src/i18n/I18nContext';
 import { configureNotificationHandler } from './src/notifications/notificationService';
 import { configureRevenueCat } from './src/premium/premiumService';
 
@@ -10,7 +11,9 @@ configureRevenueCat(); // no-op in Expo Go; activates automatically in dev/produ
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppNavigator />
+      <I18nProvider>
+        <AppNavigator />
+      </I18nProvider>
     </SafeAreaProvider>
   );
 }

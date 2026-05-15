@@ -14,10 +14,11 @@ import { LocationCard } from '../components/LocationCard';
 import type { LocationResult } from '../components/LocationCard';
 import { PremiumBadge } from '../components/PremiumBadge';
 import { AdBanner } from '../ads/AdBanner'; // bottom sticky only
+import { useI18n } from '../i18n/I18nContext';
 import { getPremiumStatus } from '../premium/premiumService';
 import { evaluateWatering } from '../rules/wateringRules';
 import { fetchForecastWithCache } from '../weather/weatherService';
-import { loadSettings } from '../storage/storageService';
+import { loadSettings, enforceLocationLimit } from '../storage/storageService';
 import type { RootTabParamList } from '../navigation/AppNavigator';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 
@@ -43,6 +44,7 @@ const INITIAL: ScreenState = {
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavProp>();
+  const { t } = useI18n();
   const [state, setState] = useState<ScreenState>(INITIAL);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -54,6 +56,10 @@ export default function HomeScreen() {
       loadSettings(),
       getPremiumStatus(),
     ]);
+
+    // Trim to plan limit — silently removes extra locations when premium lapses
+    const locations = await enforceLocationLimit(isPremium);
+    settings.locations = locations;
 
     if (!settings.locations.length) {
       setState({ globalStatus: 'no-location', results: [], isPremium });
@@ -115,7 +121,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <View style={styles.center}>
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('home.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -126,15 +132,13 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <View style={styles.center}>
           <Text style={styles.noLocEmoji}>📍</Text>
-          <Text style={styles.noLocTitle}>No location set</Text>
-          <Text style={styles.noLocBody}>
-            Set your city in Settings to get today's watering recommendation.
-          </Text>
+          <Text style={styles.noLocTitle}>{t('home.noLocation.title')}</Text>
+          <Text style={styles.noLocBody}>{t('home.noLocation.body')}</Text>
           <TouchableOpacity
             style={styles.goToSettingsBtn}
             onPress={() => navigation.navigate('Settings')}
           >
-            <Text style={styles.goToSettingsBtnText}>Open Settings</Text>
+            <Text style={styles.goToSettingsBtnText}>{t('home.noLocation.button')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -170,7 +174,7 @@ export default function HomeScreen() {
 
         {multiLoc && (
           <View style={styles.headerMulti}>
-            <Text style={styles.headerMultiTitle}>Today</Text>
+            <Text style={styles.headerMultiTitle}>{t('home.today')}</Text>
             <PremiumBadge isPremium={isPremium} />
           </View>
         )}
@@ -189,9 +193,7 @@ export default function HomeScreen() {
           </View>
         ))}
 
-        <Text style={styles.updateNote}>
-          Pull down to refresh · data updates every 30 min
-        </Text>
+        <Text style={styles.updateNote}>{t('home.footer')}</Text>
       </ScrollView>
 
       <AdBanner visible={!isPremium} placement="bottom" />

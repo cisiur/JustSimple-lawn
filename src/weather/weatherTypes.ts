@@ -40,11 +40,19 @@ export interface WeatherData {
 
 export type WateringDecisionType = 'water' | 'skip' | 'uncertain';
 
+/** i18n key for the decision reason — translated in UI layer */
+export type ReasonKey =
+  | 'reason.recentRain'
+  | 'reason.forecastRain'
+  | 'reason.hotAndDry'
+  | 'reason.default'
+  | 'reason.noData';
+
 export interface WateringDecision {
-  decision: WateringDecisionType;
-  reason: string;          // Plain-language sentence shown to the user
-  recentRainMm: number;    // Diagnostic — rain in the past window
-  expectedRainMm: number;  // Diagnostic — rain in the forecast window
+  decision:      WateringDecisionType;
+  reason:        ReasonKey;   // i18n key — translated in the UI
+  recentRainMm:  number;      // Diagnostic — rain in the past window
+  expectedRainMm: number;     // Diagnostic — rain in the forecast window
   todayMaxTempC: number;
 }
 

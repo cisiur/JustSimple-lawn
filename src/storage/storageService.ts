@@ -98,6 +98,20 @@ export async function removeLocation(id: string): Promise<void> {
   await saveSettings({ locations: current.locations.filter(l => l.id !== id) });
 }
 
+/**
+ * Trims the saved locations list to the allowed limit for the given plan.
+ * Keeps the first N locations (oldest added = top of list).
+ * Returns the final locations array so callers can sync their state.
+ */
+export async function enforceLocationLimit(isPremium: boolean): Promise<Location[]> {
+  const limit   = isPremium ? MAX_LOCATIONS_PREMIUM : MAX_LOCATIONS_FREE;
+  const current = await loadSettings();
+  if (current.locations.length <= limit) return current.locations;
+  const trimmed = current.locations.slice(0, limit);
+  await saveSettings({ locations: trimmed });
+  return trimmed;
+}
+
 // ─── Weather cache API (per-location, keyed by rounded coords) ────────────────
 
 export interface RawWeatherCache {

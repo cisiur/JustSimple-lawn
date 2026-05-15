@@ -1,40 +1,49 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { WateringDecisionType } from '../weather/weatherTypes';
+import { useI18n } from '../i18n/I18nContext';
+import type { TranslationKey } from '../i18n/translations';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZE } from '../constants/theme';
 
 interface DecisionBadgeProps {
   decision: WateringDecisionType;
+  /** Already-translated reason sentence */
   reason: string;
 }
 
-const CONFIG: Record<WateringDecisionType, { emoji: string; label: string; bg: string; text: string }> = {
+const CONFIG: Record<WateringDecisionType, {
+  emoji: string;
+  labelKey: TranslationKey;
+  bg: string;
+  text: string;
+}> = {
   water: {
-    emoji: '💧',
-    label: 'Water today',
-    bg: COLORS.primaryLight,
-    text: COLORS.primaryDark,
+    emoji:    '💧',
+    labelKey: 'decision.water',
+    bg:       COLORS.primaryLight,
+    text:     COLORS.primaryDark,
   },
   skip: {
-    emoji: '☔',
-    label: 'Skip today',
-    bg: COLORS.redLight,
-    text: COLORS.red,
+    emoji:    '☔',
+    labelKey: 'decision.skip',
+    bg:       COLORS.redLight,
+    text:     COLORS.red,
   },
   uncertain: {
-    emoji: '🌤',
-    label: 'Check later',
-    bg: COLORS.amberLight,
-    text: COLORS.amber,
+    emoji:    '🌤',
+    labelKey: 'decision.uncertain',
+    bg:       COLORS.amberLight,
+    text:     COLORS.amber,
   },
 };
 
 export function DecisionBadge({ decision, reason }: DecisionBadgeProps) {
-  const { emoji, label, bg, text } = CONFIG[decision];
+  const { t } = useI18n();
+  const { emoji, labelKey, bg, text } = CONFIG[decision];
 
   return (
     <View style={[styles.card, { backgroundColor: bg }]}>
       <Text style={styles.emoji}>{emoji}</Text>
-      <Text style={[styles.label, { color: text }]}>{label}</Text>
+      <Text style={[styles.label, { color: text }]}>{t(labelKey)}</Text>
       <Text style={styles.reason}>{reason}</Text>
     </View>
   );

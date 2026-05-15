@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Switch,
   ScrollView,
+  Modal,
   StyleSheet,
   Alert,
   ActivityIndicator,
@@ -14,12 +15,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { TimePickerModal } from '../components/TimePickerModal';
 import { UpgradeModal } from '../premium/UpgradeModal';
+import { useI18n } from '../i18n/I18nContext';
+import { SUPPORTED_LANGUAGES } from '../i18n/translations';
+import type { LanguageCode } from '../i18n/translations';
 import {
   loadSettings,
   saveSettings,
   addLocation,
   removeLocation,
   clearWeatherCache,
+  enforceLocationLimit,
   AppSettings,
   Location,
   MAX_LOCATIONS_FREE,
@@ -59,12 +64,15 @@ function Row({ children, last }: { children: React.ReactNode; last?: boolean }) 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const [settings, setSettings]       = useState<AppSettings | null>(null);
-  const [isPremium, setIsPremium]     = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [cityDraft, setCityDraft]     = useState('');
+  const { t, languageSetting, changeLanguage } = useI18n();
+
+  const [settings, setSettings]           = useState<AppSettings | null>(null);
+  const [isPremium, setIsPremium]         = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [cityDraft, setCityDraft]         = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showUpgrade, setShowUpgrade]     = useState(false);
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
   // Reload on focus
   useFocusEffect(
@@ -73,7 +81,9 @@ export default function SettingsScreen() {
       (async () => {
         const [s, { isPremium: p }] = await Promise.all([loadSettings(), getPremiumStatus()]);
         if (!active) return;
-        setSettings(s);
+        // Trim locations to plan limit (no-op if already within limit)
+        const trimmed = await enforceLocationLimit(p);
+        setSettings({ ...s, locations: trimmed });
         setIsPremium(p);
       })();
       return () => { active = false; };
@@ -88,12 +98,12 @@ export default function SettingsScreen() {
 
   async function handleAddCity() {
     const name = cityDraft.trim();
-    if (!name) { Alert.alert('Enter a city name first.'); return; }
+    if (!name) { Alert.alert(t('alert.enterCity')); return; }
     setSaving(true);
     try {
       const results = await geocodeCity(name);
       if (!results.length) {
-        Alert.alert('City not found', `"${name}" returned no results. Try a different spelling.`);
+        Alert.alert(t('alert.cityNotFound'), t('alert.cityNotFound.body', { name }));
         return;
       }
       const { name: n, latitude, longitude, country, admin1 } = results[0];
@@ -103,7 +113,7 @@ export default function SettingsScreen() {
       setSettings(prev => prev ? { ...prev, locations: [...prev.locations, newLoc] } : prev);
       setCityDraft('');
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not add location.');
+      Alert.alert(t('alert.addError'), e instanceof Error ? e.message : t('alert.addError'));
     } finally {
       setSaving(false);
     }
@@ -118,7 +128,7 @@ export default function SettingsScreen() {
       await clearWeatherCache();
       setSettings(prev => prev ? { ...prev, locations: [...prev.locations, newLoc] } : prev);
     } catch (e) {
-      Alert.alert('Location error', e instanceof Error ? e.message : 'Could not get GPS location.');
+      Alert.alert(t('alert.locationError'), e instanceof Error ? e.message : t('alert.locationError'));
     } finally {
       setSaving(false);
     }
@@ -126,12 +136,12 @@ export default function SettingsScreen() {
 
   async function handleRemoveLocation(loc: Location) {
     Alert.alert(
-      'Remove location',
-      `Remove "${loc.name}"?`,
+      t('settings.locations.remove.title'),
+      t('settings.locations.remove.message', { name: loc.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('settings.locations.remove.cancel'), style: 'cancel' },
         {
-          text: 'Remove', style: 'destructive',
+          text: t('settings.locations.remove.confirm'), style: 'destructive',
           onPress: async () => {
             await removeLocation(loc.id);
             await clearWeatherCache();
@@ -150,7 +160,7 @@ export default function SettingsScreen() {
     if (value) {
       const granted = await requestNotificationPermission();
       if (!granted) {
-        Alert.alert('Permission required', 'Enable notifications in your device settings.');
+        Alert.alert(t('alert.permissionRequired'), t('alert.permissionRequired.body'));
         return;
       }
       await saveSettings({ reminderEnabled: true });
@@ -176,6 +186,9 @@ export default function SettingsScreen() {
 
   async function handleMockPremiumToggle(value: boolean) {
     await setMockPremium(value);
+    // If downgrading, trim locations to free limit right away
+    const trimmed = await enforceLocationLimit(value);
+    setSettings(prev => prev ? { ...prev, locations: trimmed } : prev);
     setIsPremium(value);
   }
 
@@ -196,12 +209,12 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
 
         {/* ── Locations ────────────────────────────────────────────────────── */}
-        <SectionHeader title={`Locations (${locations.length} / ${maxLocations})`} />
+        <SectionHeader title={t('settings.locations', { n: locations.length, max: maxLocations })} />
         <Card>
           {/* Saved locations list */}
           {locations.length === 0 && (
             <Row last>
-              <Text style={styles.hintText}>No location added yet.</Text>
+              <Text style={styles.hintText}>{t('settings.locations.none')}</Text>
             </Row>
           )}
           {locations.map((loc, idx) => (
@@ -225,7 +238,7 @@ export default function SettingsScreen() {
                   style={styles.input}
                   value={cityDraft}
                   onChangeText={setCityDraft}
-                  placeholder="Search city…"
+                  placeholder={t('settings.locations.search')}
                   placeholderTextColor={COLORS.textSecondary}
                   autoCorrect={false}
                   returnKeyType="search"
@@ -239,7 +252,7 @@ export default function SettingsScreen() {
                 >
                   {saving
                     ? <ActivityIndicator size="small" color={COLORS.white} />
-                    : <Text style={styles.saveButtonText}>Add</Text>
+                    : <Text style={styles.saveButtonText}>{t('settings.locations.add')}</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -249,7 +262,7 @@ export default function SettingsScreen() {
                   onPress={handleAddGPS}
                   disabled={saving}
                 >
-                  <Text style={styles.gpsButtonText}>📍  Use my current location</Text>
+                  <Text style={styles.gpsButtonText}>{t('settings.locations.useGPS')}</Text>
                 </TouchableOpacity>
               </Row>
             </>
@@ -261,25 +274,44 @@ export default function SettingsScreen() {
               <View style={styles.lockedRow}>
                 <Text style={styles.lockIcon}>🔒</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.lockedTitle}>Premium feature</Text>
+                  <Text style={styles.lockedTitle}>{t('locked.title')}</Text>
                   <Text style={styles.hintText}>
-                    Upgrade to track up to {MAX_LOCATIONS_PREMIUM} locations.
+                    {t('settings.locations.locked', { max: MAX_LOCATIONS_PREMIUM })}
                   </Text>
                 </View>
                 <TouchableOpacity style={styles.upgradeChip} onPress={() => setShowUpgrade(true)}>
-                  <Text style={styles.upgradeChipText}>Upgrade</Text>
+                  <Text style={styles.upgradeChipText}>{t('settings.upgrade.chip')}</Text>
                 </TouchableOpacity>
               </View>
             </Row>
           )}
         </Card>
 
+        {/* ── Language ─────────────────────────────────────────────────────── */}
+        <SectionHeader title={t('settings.language')} />
+        <Card>
+          <Row last>
+            <Text style={styles.rowLabel}>{t('settings.language')}</Text>
+            <TouchableOpacity
+              style={styles.langSelector}
+              onPress={() => setShowLangPicker(true)}
+            >
+              <Text style={styles.langSelectorValue}>
+                {languageSetting === 'auto'
+                  ? t('settings.language.auto')
+                  : SUPPORTED_LANGUAGES.find(l => l.code === languageSetting)?.label}
+              </Text>
+              <Text style={styles.langChevron}>›</Text>
+            </TouchableOpacity>
+          </Row>
+        </Card>
+
         {/* ── Daily reminder ────────────────────────────────────────────────── */}
-        <SectionHeader title="Daily Reminder" />
+        <SectionHeader title={t('settings.reminder')} />
         {isPremium ? (
           <Card>
             <Row>
-              <Text style={styles.rowLabel}>Enable reminder</Text>
+              <Text style={styles.rowLabel}>{t('settings.reminder.enable')}</Text>
               <Switch
                 value={settings.reminderEnabled}
                 onValueChange={handleReminderToggle}
@@ -289,7 +321,7 @@ export default function SettingsScreen() {
             </Row>
             {settings.reminderEnabled && (
               <Row last>
-                <Text style={styles.rowLabel}>Reminder time</Text>
+                <Text style={styles.rowLabel}>{t('settings.reminder.time')}</Text>
                 <TouchableOpacity
                   style={styles.timeButton}
                   onPress={() => setShowTimePicker(true)}
@@ -306,26 +338,24 @@ export default function SettingsScreen() {
             <View style={styles.lockedRow}>
               <Text style={styles.lockIcon}>🔒</Text>
               <View style={styles.lockedText}>
-                <Text style={styles.lockedTitle}>Premium feature</Text>
-                <Text style={styles.hintText}>
-                  Get a daily push notification with today's watering recommendation.
-                </Text>
+                <Text style={styles.lockedTitle}>{t('locked.title')}</Text>
+                <Text style={styles.hintText}>{t('settings.reminder.locked')}</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.upgradeButton} onPress={() => setShowUpgrade(true)}>
-              <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
+              <Text style={styles.upgradeButtonText}>{t('settings.upgrade')}</Text>
             </TouchableOpacity>
           </Card>
         )}
 
         {/* ── Plan ─────────────────────────────────────────────────────────── */}
-        <SectionHeader title="Plan" />
+        <SectionHeader title={t('settings.plan')} />
         {isPremium ? (
           <Card>
             <Row last>
               <View>
-                <Text style={styles.premiumActiveTitle}>⭐ You're on Premium</Text>
-                <Text style={styles.hintText}>No ads · Up to 4 locations · Daily reminder</Text>
+                <Text style={styles.premiumActiveTitle}>{t('settings.plan.active')}</Text>
+                <Text style={styles.hintText}>{t('settings.plan.active.hint')}</Text>
               </View>
             </Row>
           </Card>
@@ -333,17 +363,17 @@ export default function SettingsScreen() {
           <Card>
             <Row>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Free plan</Text>
-                <Text style={styles.hintText}>1 location · Banner ads · No reminders</Text>
+                <Text style={styles.rowLabel}>{t('settings.plan.free')}</Text>
+                <Text style={styles.hintText}>{t('settings.plan.free.hint')}</Text>
               </View>
             </Row>
             <Row last>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Premium</Text>
-                <Text style={styles.hintText}>Up to 4 locations · No ads · Daily reminder</Text>
+                <Text style={styles.rowLabel}>{t('settings.plan.premium')}</Text>
+                <Text style={styles.hintText}>{t('settings.plan.premium.hint')}</Text>
               </View>
               <TouchableOpacity style={styles.upgradeChip} onPress={() => setShowUpgrade(true)}>
-                <Text style={styles.upgradeChipText}>Upgrade</Text>
+                <Text style={styles.upgradeChipText}>{t('settings.upgrade.chip')}</Text>
               </TouchableOpacity>
             </Row>
           </Card>
@@ -352,12 +382,12 @@ export default function SettingsScreen() {
         {/* ── Developer Tools ───────────────────────────────────────────────── */}
         {__DEV__ && (
           <>
-            <SectionHeader title="Developer Tools" />
+            <SectionHeader title={t('settings.dev')} />
             <Card>
               <Row last>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowLabel}>Mock premium</Text>
-                  <Text style={styles.hintText}>Toggle premium UI without billing.</Text>
+                  <Text style={styles.rowLabel}>{t('settings.dev.mock')}</Text>
+                  <Text style={styles.hintText}>{t('settings.dev.mock.hint')}</Text>
                 </View>
                 <Switch
                   value={isPremium}
@@ -371,12 +401,10 @@ export default function SettingsScreen() {
         )}
 
         {/* ── About ─────────────────────────────────────────────────────────── */}
-        <SectionHeader title="About" />
+        <SectionHeader title={t('settings.about')} />
         <Card>
           <Row last>
-            <Text style={styles.hintText}>
-              Weather data provided by Open-Meteo (open-meteo.com) — free and open-source.
-            </Text>
+            <Text style={styles.hintText}>{t('settings.about.credit')}</Text>
           </Row>
         </Card>
 
@@ -388,6 +416,48 @@ export default function SettingsScreen() {
         onDismiss={() => setShowUpgrade(false)}
         onPurchased={handlePurchased}
       />
+
+      {/* ── Language picker modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={showLangPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLangPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.langBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowLangPicker(false)}
+        />
+        <View style={styles.langSheet}>
+          <Text style={styles.langSheetTitle}>{t('settings.language')}</Text>
+
+          {/* Auto option */}
+          {((['auto', ...SUPPORTED_LANGUAGES.map(l => l.code)] as const)).map((code, idx) => {
+            const isAuto     = code === 'auto';
+            const isSelected = languageSetting === code;
+            const label      = isAuto
+              ? t('settings.language.auto')
+              : SUPPORTED_LANGUAGES.find(l => l.code === code)!.label;
+            const isLast     = idx === SUPPORTED_LANGUAGES.length; // auto + all langs
+            return (
+              <TouchableOpacity
+                key={code}
+                style={[styles.langOption, isLast && styles.langOptionLast]}
+                onPress={() => {
+                  changeLanguage(code as LanguageCode | 'auto');
+                  setShowLangPicker(false);
+                }}
+              >
+                <Text style={[styles.langOptionText, isSelected && styles.langOptionTextSelected]}>
+                  {label}
+                </Text>
+                {isSelected && <Text style={styles.langOptionCheck}>✓</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Modal>
 
       <TimePickerModal
         visible={showTimePicker}
@@ -448,6 +518,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.md,
     fontWeight: '500',
     color: COLORS.textPrimary,
+    flex: 1,
   },
   hintText: {
     fontSize: FONT_SIZE.sm,
@@ -573,5 +644,77 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 2,
+  },
+  // Language — trigger row
+  langSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  langSelectorValue: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  langChevron: {
+    fontSize: 20,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
+  },
+  // Language — modal backdrop
+  langBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  // Language — modal sheet (centre card)
+  langSheet: {
+    position: 'absolute',
+    top: '50%',
+    left: SPACING.xl,
+    right: SPACING.xl,
+    transform: [{ translateY: -180 }],
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  langSheetTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  langOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
+  langOptionLast: {
+    // no extra style needed — border-top already separates items
+  },
+  langOptionText: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textPrimary,
+  },
+  langOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  langOptionCheck: {
+    fontSize: FONT_SIZE.md,
+    color: COLORS.primary,
+    fontWeight: '700',
   },
 });

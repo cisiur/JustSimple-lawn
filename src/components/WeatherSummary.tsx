@@ -1,14 +1,15 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { useI18n } from '../i18n/I18nContext';
 import { COLORS, FONT_SIZE, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 interface WeatherSummaryProps {
-  recentRainMm: number;
+  recentRainMm:  number;
   expectedRainMm: number;
   todayMaxTempC: number;
 }
 
 interface StatProps {
-  icon: string;
+  icon:  string;
   value: string;
   label: string;
 }
@@ -23,25 +24,31 @@ function Stat({ icon, value, label }: StatProps) {
   );
 }
 
+function fmtMm(mm: number): string {
+  return `${mm % 1 === 0 ? mm : mm.toFixed(1)} mm`;
+}
+
 export function WeatherSummary({ recentRainMm, expectedRainMm, todayMaxTempC }: WeatherSummaryProps) {
+  const { t } = useI18n();
+
   return (
     <View style={styles.container}>
       <Stat
         icon="🌧"
-        value={`${recentRainMm % 1 === 0 ? recentRainMm : recentRainMm.toFixed(1)} mm`}
-        label="Rain last 24h"
+        value={fmtMm(recentRainMm)}
+        label={t('weather.recentRain')}
       />
       <View style={styles.divider} />
       <Stat
         icon="⛅"
-        value={`${expectedRainMm % 1 === 0 ? expectedRainMm : expectedRainMm.toFixed(1)} mm`}
-        label="Rain next 24h"
+        value={fmtMm(expectedRainMm)}
+        label={t('weather.forecastRain')}
       />
       <View style={styles.divider} />
       <Stat
         icon="🌡"
         value={`${Math.round(todayMaxTempC)}°C`}
-        label="Today's high"
+        label={t('weather.todayHigh')}
       />
     </View>
   );

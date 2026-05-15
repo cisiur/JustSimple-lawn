@@ -3,10 +3,11 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import { useI18n } from '../i18n/I18nContext';
 import { COLORS } from '../constants/theme';
 
 export type RootTabParamList = {
-  Home: undefined;
+  Home:     undefined;
   Settings: undefined;
 };
 
@@ -15,11 +16,13 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TAB_ICONS: Record<keyof RootTabParamList, [IoniconName, IoniconName]> = {
-  Home: ['leaf', 'leaf-outline'],
+  Home:     ['leaf',     'leaf-outline'    ],
   Settings: ['settings', 'settings-outline'],
 };
 
 export function AppNavigator() {
+  const { t } = useI18n();
+
   return (
     <NavigationContainer>
       <Tab.Navigator
@@ -29,17 +32,17 @@ export function AppNavigator() {
             tabBarIcon: ({ focused, color, size }) => (
               <Ionicons name={focused ? active : inactive} size={size} color={color} />
             ),
-            tabBarActiveTintColor: COLORS.primary,
+            tabBarActiveTintColor:   COLORS.primary,
             tabBarInactiveTintColor: COLORS.textSecondary,
             tabBarStyle: {
-              borderTopColor: COLORS.border,
-              backgroundColor: COLORS.white,
+              borderTopColor:   COLORS.border,
+              backgroundColor:  COLORS.white,
             },
-            headerStyle: { backgroundColor: COLORS.white },
+            headerStyle:           { backgroundColor: COLORS.white },
             headerTitleStyle: {
-              color: COLORS.textPrimary,
+              color:      COLORS.textPrimary,
               fontWeight: '700',
-              fontSize: 17,
+              fontSize:   17,
             },
             headerShadowVisible: false,
           };
@@ -48,12 +51,12 @@ export function AppNavigator() {
         <Tab.Screen
           name="Home"
           component={HomeScreen}
-          options={{ title: 'JustSimple Lawn', tabBarLabel: 'Today' }}
+          options={{ title: 'JustSimple Lawn', tabBarLabel: t('home.today') }}
         />
         <Tab.Screen
           name="Settings"
           component={SettingsScreen}
-          options={{ title: 'Settings' }}
+          options={{ title: t('nav.settings'), tabBarLabel: t('nav.settings') }}
         />
       </Tab.Navigator>
     </NavigationContainer>

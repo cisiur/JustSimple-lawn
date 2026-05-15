@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { t } from '../i18n/i18n';
 
 const REMINDER_IDENTIFIER = 'justsimple-lawn-daily-reminder';
 
@@ -44,8 +45,8 @@ export async function scheduleDailyReminder(hhmm: string): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     identifier: REMINDER_IDENTIFIER,
     content: {
-      title: '🌿 JustSimple Lawn',
-      body: "Open the app to see today's watering recommendation.",
+      title: `🌿 ${t('notification.title')}`,
+      body:  t('notification.body'),
       sound: 'default',
     },
     trigger: {
