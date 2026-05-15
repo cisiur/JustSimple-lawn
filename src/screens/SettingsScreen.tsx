@@ -19,11 +19,9 @@ import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS, BORDER_RADIUS as BR } from '
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatTime12h(hhmm: string): string {
+function formatTime(hhmm: string): string {
   const [h, m] = hhmm.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 || 12;
-  return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 // ─── Shared layout pieces ─────────────────────────────────────────────────────
@@ -175,7 +173,7 @@ export default function SettingsScreen() {
                   onPress={() => setShowTimePicker(true)}
                 >
                   <Text style={styles.timeButtonText}>
-                    {formatTime12h(settings.reminderTime)}
+                    {formatTime(settings.reminderTime)}
                   </Text>
                 </TouchableOpacity>
               </Row>

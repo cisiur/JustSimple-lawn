@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -7,7 +7,17 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { WheelColumn, WHEEL_H } from './WheelColumn';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+const MINUTES = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+const COLUMN_W = 88;
+
+function parseTime(hhmm: string): [number, number] {
+  const [h, m] = hhmm.split(':').map(Number);
+  return [Number.isFinite(h) ? h : 8, Number.isFinite(m) ? m : 0];
+}
 
 interface TimePickerModalProps {
   visible: boolean;
@@ -16,50 +26,23 @@ interface TimePickerModalProps {
   onDismiss: () => void;
 }
 
-function pad(n: number) {
-  return n.toString().padStart(2, '0');
-}
-
-function parseTime(hhmm: string): [number, number] {
-  const [h, m] = hhmm.split(':').map(Number);
-  return [Number.isFinite(h) ? h : 8, Number.isFinite(m) ? m : 0];
-}
-
-function formatDisplay(h: number): string {
-  if (h === 0) return '12 AM';
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return '12 PM';
-  return `${h - 12} PM`;
-}
-
 export function TimePickerModal({ visible, value, onConfirm, onDismiss }: TimePickerModalProps) {
-  const [initH, initM] = parseTime(value);
-  const [hour, setHour] = useState(initH);
-  const [minute, setMinute] = useState(initM);
+  const [hour, setHour] = useState(() => parseTime(value)[0]);
+  const [minute, setMinute] = useState(() => parseTime(value)[1]);
+  // nonce forces WheelColumn to remount (and reset scroll) each time the modal opens
+  const [nonce, setNonce] = useState(0);
 
-  // Re-sync when the modal opens with a new value
-  const [lastValue, setLastValue] = useState(value);
-  if (visible && value !== lastValue) {
-    const [h, m] = parseTime(value);
-    setHour(h);
-    setMinute(m);
-    setLastValue(value);
-  }
-
-  function stepHour(delta: number) {
-    setHour(h => (h + delta + 24) % 24);
-  }
-
-  function stepMinute(delta: number) {
-    // Step in 5-minute increments
-    setMinute(m => {
-      const next = m + delta * 5;
-      return ((next % 60) + 60) % 60;
-    });
-  }
+  useEffect(() => {
+    if (visible) {
+      const [h, m] = parseTime(value);
+      setHour(h);
+      setMinute(m);
+      setNonce(n => n + 1);
+    }
+  }, [visible]); // intentionally excludes `value` — only reset on open
 
   function handleConfirm() {
-    onConfirm(`${pad(hour)}:${pad(minute)}`);
+    onConfirm(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
   }
 
   return (
@@ -69,41 +52,30 @@ export function TimePickerModal({ visible, value, onConfirm, onDismiss }: TimePi
       animationType="fade"
       onRequestClose={onDismiss}
     >
+      {/* Dim backdrop — tap to dismiss */}
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onDismiss} />
 
       <View style={styles.sheet}>
-        <Text style={styles.title}>Select reminder time</Text>
+        <Text style={styles.title}>Reminder time</Text>
 
-        <View style={styles.pickerRow}>
-          {/* Hour column */}
-          <View style={styles.column}>
-            <TouchableOpacity style={styles.arrowBtn} onPress={() => stepHour(1)}>
-              <Text style={styles.arrow}>▲</Text>
-            </TouchableOpacity>
-            <View style={styles.valueBox}>
-              <Text style={styles.valueText}>{formatDisplay(hour)}</Text>
-            </View>
-            <TouchableOpacity style={styles.arrowBtn} onPress={() => stepHour(-1)}>
-              <Text style={styles.arrow}>▼</Text>
-            </TouchableOpacity>
-            <Text style={styles.columnLabel}>Hour</Text>
-          </View>
+        <View style={styles.wheelsRow}>
+          <WheelColumn
+            key={`h-${nonce}`}
+            items={HOURS}
+            initialIndex={hour}
+            onChange={setHour}
+            width={COLUMN_W}
+          />
 
           <Text style={styles.colon}>:</Text>
 
-          {/* Minute column */}
-          <View style={styles.column}>
-            <TouchableOpacity style={styles.arrowBtn} onPress={() => stepMinute(1)}>
-              <Text style={styles.arrow}>▲</Text>
-            </TouchableOpacity>
-            <View style={styles.valueBox}>
-              <Text style={styles.valueText}>{pad(minute)}</Text>
-            </View>
-            <TouchableOpacity style={styles.arrowBtn} onPress={() => stepMinute(-1)}>
-              <Text style={styles.arrow}>▼</Text>
-            </TouchableOpacity>
-            <Text style={styles.columnLabel}>Min</Text>
-          </View>
+          <WheelColumn
+            key={`m-${nonce}`}
+            items={MINUTES}
+            initialIndex={minute}
+            onChange={setMinute}
+            width={COLUMN_W}
+          />
         </View>
 
         <View style={styles.buttonRow}>
@@ -122,79 +94,47 @@ export function TimePickerModal({ visible, value, onConfirm, onDismiss }: TimePi
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 34 : 24,
+    bottom: Platform.OS === 'ios' ? 40 : 28,
     left: SPACING.lg,
     right: SPACING.lg,
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.xl,
-    padding: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
       },
-      android: { elevation: 12 },
+      android: { elevation: 16 },
     }),
   },
   title: {
     fontSize: FONT_SIZE.lg,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
-  pickerRow: {
+  wheelsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.lg,
-    marginBottom: SPACING.xl,
-  },
-  column: {
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  arrowBtn: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-  },
-  arrow: {
-    fontSize: FONT_SIZE.lg,
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  valueBox: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    minWidth: 96,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  valueText: {
-    fontSize: FONT_SIZE.xl,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  columnLabel: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    height: WHEEL_H,
+    marginBottom: SPACING.lg,
   },
   colon: {
-    fontSize: FONT_SIZE.xxl,
+    fontSize: 36,
     fontWeight: '700',
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
+    color: COLORS.textPrimary,
+    marginHorizontal: SPACING.sm,
+    marginBottom: SPACING.sm, // optical centering
   },
   buttonRow: {
     flexDirection: 'row',
