@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { DecisionBadge } from './DecisionBadge';
 import { WeatherSummary } from './WeatherSummary';
+import { AdBanner } from '../ads/AdBanner';
 import type { WateringDecision } from '../weather/weatherTypes';
 import type { Location } from '../storage/storageService';
 import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
@@ -8,20 +9,21 @@ import { COLORS, SPACING, FONT_SIZE, BORDER_RADIUS } from '../constants/theme';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LocationResult {
-  location:  Location;
-  status:    'loading' | 'ready' | 'error';
-  decision:  WateringDecision | null;
-  error:     string | null;
+  location: Location;
+  status:   'loading' | 'ready' | 'error';
+  decision: WateringDecision | null;
+  error:    string | null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface LocationCardProps {
-  result:    LocationResult;
-  showName:  boolean; // hide the name row when there is only one location
+  result:       LocationResult;
+  showName:     boolean;   // hide when only one location
+  showInlineAd: boolean;   // show ad between badge and weather summary
 }
 
-export function LocationCard({ result, showName }: LocationCardProps) {
+export function LocationCard({ result, showName, showInlineAd }: LocationCardProps) {
   const { location, status, decision, error } = result;
 
   return (
@@ -51,6 +53,10 @@ export function LocationCard({ result, showName }: LocationCardProps) {
       {status === 'ready' && decision && (
         <>
           <DecisionBadge decision={decision.decision} reason={decision.reason} />
+
+          {/* Inline ad sits between the big decision card and the weather data */}
+          <AdBanner visible={showInlineAd} placement="inline" />
+
           <Text style={styles.sectionLabel}>Weather summary</Text>
           <WeatherSummary
             recentRainMm={decision.recentRainMm}

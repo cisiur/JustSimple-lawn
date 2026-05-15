@@ -88,16 +88,18 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     overflow: 'hidden',
   },
-  // Inline card — inherits the scroll container's horizontal padding
+  // Inline — negative margins escape the ScrollView's horizontal padding (SPACING.lg = 24)
+  // so the banner stretches edge-to-edge like the bottom bar.
   inlineContainer: {
-    width: '100%',
+    marginHorizontal: -24,
     minHeight: 50,
     backgroundColor: COLORS.adBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLORS.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
     overflow: 'hidden',
   },
   label: {

@@ -13,7 +13,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { LocationCard } from '../components/LocationCard';
 import type { LocationResult } from '../components/LocationCard';
 import { PremiumBadge } from '../components/PremiumBadge';
-import { AdBanner } from '../ads/AdBanner';
+import { AdBanner } from '../ads/AdBanner'; // bottom sticky only
 import { getPremiumStatus } from '../premium/premiumService';
 import { evaluateWatering } from '../rules/wateringRules';
 import { fetchForecastWithCache } from '../weather/weatherService';
@@ -178,12 +178,11 @@ export default function HomeScreen() {
         {/* Location cards — one per saved location */}
         {results.map((result, index) => (
           <View key={result.location.id}>
-            <LocationCard result={result} showName={multiLoc} />
-
-            {/* Inline ad after the first card only (free users) */}
-            {index === 0 && (
-              <AdBanner visible={!isPremium} placement="inline" />
-            )}
+            <LocationCard
+              result={result}
+              showName={multiLoc}
+              showInlineAd={!isPremium && index === 0}
+            />
 
             {/* Divider between cards */}
             {index < results.length - 1 && <View style={styles.divider} />}
