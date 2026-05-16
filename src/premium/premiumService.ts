@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 let Purchases: any = null;
+let _rcConfigured = false; // true only after Purchases.configure() succeeds
 
 if (!isExpoGo) {
   try {
@@ -49,11 +50,12 @@ export function configureRevenueCat(): void {
     : (Constants.expoConfig?.extra?.revenueCatKeyIos as string | undefined);
 
   if (!key) {
-    console.warn('[RevenueCat] API key not set — check your .env file.');
+    console.warn('[RevenueCat] API key not set — running in mock mode.');
     return;
   }
 
   Purchases.configure({ apiKey: key });
+  _rcConfigured = true;
 }
 
 // ─── Entitlement check ───────────────────────────────────────────────────────
@@ -68,7 +70,7 @@ export async function getPremiumStatus(): Promise<PremiumStatus> {
     } catch { /* ignore */ }
   }
 
-  if (Purchases) {
+  if (Purchases && _rcConfigured) {
     try {
       const info = await Purchases.getCustomerInfo();
       const isPremium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
@@ -90,7 +92,7 @@ export async function getPremiumStatus(): Promise<PremiumStatus> {
 // ─── Offerings ───────────────────────────────────────────────────────────────
 
 export async function getOfferings(): Promise<PremiumPackage[]> {
-  if (Purchases) {
+  if (Purchases && _rcConfigured) {
     try {
       const offerings = await Purchases.getOfferings();
       const pkgs = offerings.current?.availablePackages ?? [];
@@ -106,13 +108,19 @@ export async function getOfferings(): Promise<PremiumPackage[]> {
     }
   }
 
-  // Mock offering
+  // Mock offerings (shown when RC is not configured)
   return [
     {
       identifier:  '$rc_monthly',
       productId:   'com.justsimple.lawn.premium_monthly',
-      priceString: '$2.99 / month',
+      priceString: '$0.99 / month',
       packageType: 'MONTHLY',
+    },
+    {
+      identifier:  '$rc_annual',
+      productId:   'com.justsimple.lawn.premium_annual',
+      priceString: '$5.99 / year',
+      packageType: 'ANNUAL',
     },
   ];
 }
@@ -120,7 +128,7 @@ export async function getOfferings(): Promise<PremiumPackage[]> {
 // ─── Purchase ────────────────────────────────────────────────────────────────
 
 export async function purchasePremium(pkg: PremiumPackage): Promise<boolean> {
-  if (Purchases && pkg._raw) {
+  if (Purchases && _rcConfigured && pkg._raw) {
     const { customerInfo } = await Purchases.purchasePackage(pkg._raw);
     return customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
   }
@@ -133,7 +141,7 @@ export async function purchasePremium(pkg: PremiumPackage): Promise<boolean> {
 // ─── Restore ─────────────────────────────────────────────────────────────────
 
 export async function restorePurchases(): Promise<boolean> {
-  if (Purchases) {
+  if (Purchases && _rcConfigured) {
     const info = await Purchases.restorePurchases();
     return info.entitlements.active[ENTITLEMENT_ID] !== undefined;
   }

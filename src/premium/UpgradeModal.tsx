@@ -38,7 +38,9 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
     getOfferings()
       .then(pkgs => {
         setPackages(pkgs);
-        setSelected(pkgs[0] ?? null);
+        // Pre-select annual if available (best value), otherwise first option
+        const annual = pkgs.find(p => p.packageType === 'ANNUAL');
+        setSelected(annual ?? pkgs[0] ?? null);
       })
       .finally(() => setLoadingOfferings(false));
   }, [visible]);
@@ -121,6 +123,13 @@ export function UpgradeModal({ visible, onDismiss, onPurchased }: UpgradeModalPr
                 style={[styles.plan, selected?.identifier === pkg.identifier && styles.planSelected]}
                 onPress={() => setSelected(pkg)}
               >
+                {pkg.packageType === 'ANNUAL' && (
+                  <View style={styles.badgeRow}>
+                    <View style={styles.bestValueBadge}>
+                      <Text style={styles.bestValueText}>{t('premium.package.bestValue')}</Text>
+                    </View>
+                  </View>
+                )}
                 <Text style={[styles.planType, selected?.identifier === pkg.identifier && styles.planTypeSelected]}>
                   {pkg.packageType === 'MONTHLY'
                     ? t('premium.package.monthly')
@@ -243,6 +252,23 @@ const styles = StyleSheet.create({
   planSelected: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primaryLight,
+  },
+  badgeRow: {
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  bestValueBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+  },
+  bestValueText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   planType: {
     fontSize: FONT_SIZE.sm,
