@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { SoilMoistureState } from '../weather/weatherTypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ const KEYS = {
   SETTINGS:      '@jsl/settings',
   WEATHER_CACHE: '@jsl/weather_cache', // legacy single-entry key (kept for clearing)
 } as const;
+
+const SOIL_MOISTURE_KEY = '@jsl/soil_moisture';
 
 // ─── ID helper ────────────────────────────────────────────────────────────────
 
@@ -152,4 +155,20 @@ export async function clearWeatherCache(): Promise<void> {
     k => k.startsWith('@jsl/wc_') || k === KEYS.WEATHER_CACHE,
   );
   if (cacheKeys.length) await AsyncStorage.multiRemove(cacheKeys);
+}
+
+// ─── Soil moisture state ──────────────────────────────────────────────────────
+
+export async function loadSoilMoisture(): Promise<SoilMoistureState | null> {
+  try {
+    const raw = await AsyncStorage.getItem(SOIL_MOISTURE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as SoilMoistureState;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSoilMoisture(state: SoilMoistureState): Promise<void> {
+  await AsyncStorage.setItem(SOIL_MOISTURE_KEY, JSON.stringify(state));
 }

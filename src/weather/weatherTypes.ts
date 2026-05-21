@@ -7,9 +7,11 @@ export interface OpenMeteoHourly {
 }
 
 export interface OpenMeteoDaily {
-  time: string[];                // ISO date strings
-  precipitation_sum: number[];   // mm
-  temperature_2m_max: number[];  // °C
+  time: string[];                          // ISO date strings
+  precipitation_sum: number[];             // mm
+  temperature_2m_max: number[];            // °C
+  et0_fao_evapotranspiration: number[];    // mm — reference evapotranspiration
+  precipitation_probability_max: number[]; // % — max probability of precipitation
 }
 
 export interface OpenMeteoForecastResponse {
@@ -32,8 +34,19 @@ export interface WeatherData {
     time: string[];
     precipitationSum: number[];
     temperature2mMax: number[];
+    et0EvapotranspirationSum: number[];    // mm per day
+    precipitationProbabilityMax: number[]; // % per day
   };
   timezone: string;
+}
+
+// ─── Soil moisture state (persisted in AsyncStorage) ─────────────────────────
+
+export interface SoilMoistureState {
+  moisturePercent: number;              // current estimated soil moisture 0–100
+  lastUpdatedDate: string;              // ISO date string YYYY-MM-DD
+  consecutiveOversaturatedDays: number; // days moisture was above OVERSATURATED threshold
+  consecutiveDryDays: number;           // days moisture was at or below SOIL_MOISTURE_MIN
 }
 
 // ─── Decision output ──────────────────────────────────────────────────────────
@@ -46,14 +59,22 @@ export type ReasonKey =
   | 'reason.forecastRain'
   | 'reason.hotAndDry'
   | 'reason.default'
-  | 'reason.noData';
+  | 'reason.noData'
+  // Soil Moisture Balance Model reasons
+  | 'reason.soilWet'
+  | 'reason.soilDry'
+  | 'reason.soilUncertain'
+  | 'reason.forecastRainProbability'
+  | 'reason.soilOversaturated'
+  | 'reason.urgentDry';
 
 export interface WateringDecision {
-  decision:      WateringDecisionType;
-  reason:        ReasonKey;   // i18n key — translated in the UI
-  recentRainMm:  number;      // Diagnostic — rain in the past window
-  expectedRainMm: number;     // Diagnostic — rain in the forecast window
-  todayMaxTempC: number;
+  decision:             WateringDecisionType;
+  reason:               ReasonKey;   // i18n key — translated in the UI
+  recentRainMm:         number;      // Diagnostic — rain in the past 24 h window
+  expectedRainMm:       number;      // Diagnostic — rain in the forecast 24 h window
+  todayMaxTempC:        number;
+  soilMoisturePercent?: number;      // Estimated soil moisture % (soil model only)
 }
 
 // ─── Geocoding ────────────────────────────────────────────────────────────────

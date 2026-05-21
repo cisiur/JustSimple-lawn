@@ -16,7 +16,7 @@ import { PremiumBadge } from '../components/PremiumBadge';
 import { AdBanner } from '../ads/AdBanner'; // bottom sticky only
 import { useI18n } from '../i18n/I18nContext';
 import { getPremiumStatus } from '../premium/premiumService';
-import { evaluateWatering } from '../rules/wateringRules';
+import { evaluateWateringWithSoilModel } from '../rules/wateringRules';
 import { fetchForecastWithCache } from '../weather/weatherService';
 import { loadSettings, enforceLocationLimit } from '../storage/storageService';
 import type { RootTabParamList } from '../navigation/AppNavigator';
@@ -86,23 +86,27 @@ export default function HomeScreen() {
       ),
     );
 
-    const results: LocationResult[] = settings.locations.map((loc, i) => {
-      const r = settled[i];
+    // Evaluate sequentially (soil model reads/writes shared AsyncStorage state)
+    const results: LocationResult[] = [];
+    for (let i = 0; i < settings.locations.length; i++) {
+      const loc = settings.locations[i];
+      const r   = settled[i];
       if (r.status === 'fulfilled') {
-        return {
+        try {
+          const decision = await evaluateWateringWithSoilModel(r.value);
+          results.push({ location: loc, status: 'ready', decision, error: null });
+        } catch {
+          results.push({ location: loc, status: 'error', decision: null, error: 'Decision error.' });
+        }
+      } else {
+        results.push({
           location: loc,
-          status:   'ready',
-          decision: evaluateWatering(r.value),
-          error:    null,
-        };
+          status:   'error',
+          decision: null,
+          error:    r.reason instanceof Error ? r.reason.message : 'Something went wrong.',
+        });
       }
-      return {
-        location: loc,
-        status:   'error',
-        decision: null,
-        error:    r.reason instanceof Error ? r.reason.message : 'Something went wrong.',
-      };
-    });
+    }
 
     setState({ globalStatus: 'ready', results, isPremium });
     setRefreshing(false);
@@ -187,6 +191,13 @@ export default function HomeScreen() {
               showName={multiLoc}
               showInlineAd={!isPremium && index === 0}
             />
+
+            {/* Soil moisture indicator */}
+            {result.decision?.soilMoisturePercent !== undefined && (
+              <Text style={styles.soilMoisture}>
+                {t('home.soilMoisture', { pct: Math.round(result.decision.soilMoisturePercent) })}
+              </Text>
+            )}
 
             {/* Divider between cards */}
             {index < results.length - 1 && <View style={styles.divider} />}
@@ -287,6 +298,12 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.border,
     marginVertical: SPACING.lg,
+  },
+  soilMoisture: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: -SPACING.xs,
   },
   updateNote: {
     fontSize: FONT_SIZE.xs,

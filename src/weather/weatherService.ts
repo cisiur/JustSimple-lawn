@@ -23,9 +23,11 @@ function normalize(raw: OpenMeteoForecastResponse): WeatherData {
       temperature2m: raw.hourly.temperature_2m,
     },
     daily: {
-      time:               raw.daily.time,
-      precipitationSum:   raw.daily.precipitation_sum,
-      temperature2mMax:   raw.daily.temperature_2m_max,
+      time:                        raw.daily.time,
+      precipitationSum:            raw.daily.precipitation_sum,
+      temperature2mMax:            raw.daily.temperature_2m_max,
+      et0EvapotranspirationSum:    raw.daily.et0_fao_evapotranspiration,
+      precipitationProbabilityMax: raw.daily.precipitation_probability_max,
     },
     timezone: raw.timezone,
   };
