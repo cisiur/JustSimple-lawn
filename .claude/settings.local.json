@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm *)",
+      "Bash(git add *)",
+      "Bash(git filter-repo *)",
+      "Bash(bfg --version)",
+      "Bash(pip install *)",
+      "Bash(python -m git_filter_repo --version)",
+      "Bash(python3 -m git_filter_repo --version)",
+      "Bash(where git-filter-repo *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -m git_filter_repo --invert-paths --path credentials.json --force)",
+      "Bash(git push *)"
+    ]
+  }
+}
