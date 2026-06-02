@@ -93,6 +93,8 @@ export function evaluateWatering(weather: WeatherData): WateringDecision {
  */
 export async function evaluateWateringWithSoilModel(
   weather: WeatherData,
+  latitude: number,
+  longitude: number,
 ): Promise<WateringDecision> {
   const { hourly, daily } = weather;
 
@@ -119,7 +121,7 @@ export async function evaluateWateringWithSoilModel(
   const todayMaxTempC = todayDIdx !== -1 ? (daily.temperature2mMax[todayDIdx] ?? 20) : 20;
 
   // ── Load or initialise soil state ────────────────────────────────────────────
-  let stored = await loadSoilMoisture();
+  let stored = await loadSoilMoisture(latitude, longitude);
 
   if (stored === null) {
     // First launch: start one day before the earliest available daily entry so
@@ -182,7 +184,7 @@ export async function evaluateWateringWithSoilModel(
     consecutiveOversaturatedDays: oversatDays,
     consecutiveDryDays:           dryDays,
   };
-  await saveSoilMoisture(newState);
+  await saveSoilMoisture(newState, latitude, longitude);
 
   // ── Decision rules ────────────────────────────────────────────────────────────
 

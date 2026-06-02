@@ -93,7 +93,7 @@ export default function HomeScreen() {
       const r   = settled[i];
       if (r.status === 'fulfilled') {
         try {
-          const decision = await evaluateWateringWithSoilModel(r.value);
+          const decision = await evaluateWateringWithSoilModel(r.value, loc.latitude, loc.longitude);
           results.push({ location: loc, status: 'ready', decision, error: null });
         } catch {
           results.push({ location: loc, status: 'error', decision: null, error: 'Decision error.' });

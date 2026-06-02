@@ -32,7 +32,9 @@ const KEYS = {
   WEATHER_CACHE: '@jsl/weather_cache', // legacy single-entry key (kept for clearing)
 } as const;
 
-const SOIL_MOISTURE_KEY = '@jsl/soil_moisture';
+function soilMoistureKey(latitude: number, longitude: number): string {
+  return `@jsl/sm_${latitude.toFixed(2)}_${longitude.toFixed(2)}`;
+}
 
 // ─── ID helper ────────────────────────────────────────────────────────────────
 
@@ -159,9 +161,12 @@ export async function clearWeatherCache(): Promise<void> {
 
 // ─── Soil moisture state ──────────────────────────────────────────────────────
 
-export async function loadSoilMoisture(): Promise<SoilMoistureState | null> {
+export async function loadSoilMoisture(
+  latitude: number,
+  longitude: number,
+): Promise<SoilMoistureState | null> {
   try {
-    const raw = await AsyncStorage.getItem(SOIL_MOISTURE_KEY);
+    const raw = await AsyncStorage.getItem(soilMoistureKey(latitude, longitude));
     if (!raw) return null;
     return JSON.parse(raw) as SoilMoistureState;
   } catch {
@@ -169,6 +174,10 @@ export async function loadSoilMoisture(): Promise<SoilMoistureState | null> {
   }
 }
 
-export async function saveSoilMoisture(state: SoilMoistureState): Promise<void> {
-  await AsyncStorage.setItem(SOIL_MOISTURE_KEY, JSON.stringify(state));
+export async function saveSoilMoisture(
+  state: SoilMoistureState,
+  latitude: number,
+  longitude: number,
+): Promise<void> {
+  await AsyncStorage.setItem(soilMoistureKey(latitude, longitude), JSON.stringify(state));
 }
