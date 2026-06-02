@@ -43,9 +43,9 @@ function currentHourIndex(times: string[]): number {
 // ─── Synchronous fallback (legacy — keeps existing imports compiling) ─────────
 
 /**
- * Synchronous fallback. Returns 'uncertain' so callers that have not yet
- * migrated to evaluateWateringWithSoilModel do not crash.
- * All real logic lives in evaluateWateringWithSoilModel().
+ * @deprecated Use evaluateWateringWithSoilModel() instead.
+ * This synchronous stub always returns 'uncertain' and exists only
+ * for backward-compatibility. Will be removed in a future version.
  */
 export function evaluateWatering(weather: WeatherData): WateringDecision {
   // Compute hourly diagnostics so the WeatherSummary widget still shows data

@@ -7,9 +7,11 @@ import type { ExpoConfig } from 'expo/config';
 const TEST_ADMOB_APP_ID_ANDROID = 'ca-app-pub-3940256099942544~3347511713';
 const TEST_ADMOB_APP_ID_IOS     = 'ca-app-pub-3940256099942544~1458002511';
 
-const REAL_ADMOB_APP_ID_ANDROID = 'ca-app-pub-2378155255627809~3394127748';
+if (!process.env.ADMOB_APP_ID_ANDROID) {
+  console.warn('[app.config] ADMOB_APP_ID_ANDROID is not set — using test ID');
+}
 
-const admobAppIdAndroid = process.env.ADMOB_APP_ID_ANDROID || REAL_ADMOB_APP_ID_ANDROID || TEST_ADMOB_APP_ID_ANDROID;
+const admobAppIdAndroid = process.env.ADMOB_APP_ID_ANDROID || TEST_ADMOB_APP_ID_ANDROID;
 const admobAppIdIos     = process.env.ADMOB_APP_ID_IOS     || TEST_ADMOB_APP_ID_IOS;
 
 const config: ExpoConfig = {
@@ -19,7 +21,8 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
-  newArchEnabled: false, // disabled until AdMob + RevenueCat fully support new arch
+  newArchEnabled: false, // TODO: re-enable when react-native-google-mobile-ads
+                         // and react-native-purchases fully support new arch
   splash: {
     image: './assets/splash-icon.png',
     resizeMode: 'contain',
@@ -35,6 +38,8 @@ const config: ExpoConfig = {
       backgroundColor: '#4CAF50',
     },
     package: 'com.justsimple.lawn',
+    // IMPORTANT: increment versionCode before every Play Store release
+    versionCode: 1,
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
   },

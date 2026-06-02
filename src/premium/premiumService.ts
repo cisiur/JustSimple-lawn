@@ -50,7 +50,10 @@ export function configureRevenueCat(): void {
     : (Constants.expoConfig?.extra?.revenueCatKeyIos as string | undefined);
 
   if (!key) {
-    console.warn('[RevenueCat] API key not set — running in mock mode.');
+    console.error(
+      '[PremiumService] RevenueCat API key is not configured.',
+      'Set REVENUECAT_API_KEY_ANDROID / _IOS in your .env file.',
+    );
     return;
   }
 
@@ -152,5 +155,9 @@ export async function restorePurchases(): Promise<boolean> {
 // ─── Dev helper ──────────────────────────────────────────────────────────────
 
 export async function setMockPremium(value: boolean): Promise<void> {
+  if (!__DEV__) {
+    console.warn('setMockPremium is not available in production builds.');
+    return;
+  }
   await AsyncStorage.setItem(MOCK_KEY, value ? 'true' : 'false');
 }

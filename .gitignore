@@ -34,6 +34,15 @@ yarn-error.*
 .env
 .env*.local
 
+# IDE
+.idea/
+
+# Dev scripts
+scr_commit.bat
+
+# Store asset dev server
+store-assets/serve.js
+
 # credentials
 credentials.json
 credentials/

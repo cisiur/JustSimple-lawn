@@ -105,19 +105,36 @@ Scan the QR code with the installed dev build.
 
 ---
 
+## Environment setup
+
+Before running `eas build`, copy `.env.example` to `.env` and fill in real values:
+
+```bash
+cp .env.example .env
+# then edit .env with your real keys
+```
+
+`.env` is git-ignored and must never be committed. For EAS cloud builds, set secrets via:
+
+```bash
+eas secret:create --scope project --name ADMOB_APP_ID_ANDROID --value "ca-app-pub-..."
+```
+
+See `.env.example` for all required variables. Missing `ADMOB_APP_ID_ANDROID` causes a warning during config evaluation and falls back to Google's test ID (safe for dev, not for production).
+
+---
+
 ## Configuration
 
 ### AdMob
 
-Add your real Ad Unit IDs to `app.config.ts` under `extra`:
+Set `ADMOB_APP_ID_ANDROID` (and `ADMOB_APP_ID_IOS`) in `.env` or as EAS secrets. Then add your real Ad Unit IDs for banners:
 
-```ts
-extra: {
-  admobBannerBottomAndroid: 'ca-app-pub-XXXXX/XXXXX',
-  admobBannerBottomIos:     'ca-app-pub-XXXXX/XXXXX',
-  admobBannerInlineAndroid: 'ca-app-pub-XXXXX/XXXXX',
-  admobBannerInlineIos:     'ca-app-pub-XXXXX/XXXXX',
-}
+```bash
+# .env
+ADMOB_APP_ID_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
+ADMOB_BANNER_BOTTOM_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
+ADMOB_BANNER_INLINE_ANDROID=ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
 ```
 
 In `__DEV__` mode the app uses Google's public test IDs automatically.
