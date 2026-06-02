@@ -17,7 +17,7 @@ const admobAppIdIos     = process.env.ADMOB_APP_ID_IOS     || TEST_ADMOB_APP_ID_
 const config: ExpoConfig = {
   name: 'JustSimple Lawn',
   slug: 'justsimple-lawn',
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
     },
     package: 'com.justsimple.lawn',
     // IMPORTANT: increment versionCode before every Play Store release
-    versionCode: 1,
+    versionCode: 6,
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
   },
